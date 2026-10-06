@@ -27,8 +27,8 @@ class TradeApiTest extends IntegrationTest {
         return mockMvc.perform(post("/api/trades").contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
-    private long submitAndGetId(String account, String symbol) throws Exception {
-        String json = submit(account, symbol, "BUY", 100, "230.00").andReturn().getResponse().getContentAsString();
+    private long submitAndGetId(String account) throws Exception {
+        String json = submit(account, "AAPL", "BUY", 100, "230.00").andReturn().getResponse().getContentAsString();
         return ((Number) JsonPath.read(json, "$.id")).longValue();
     }
 
@@ -94,7 +94,7 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void historyShowsEachStep() throws Exception {
-        long id = submitAndGetId("ACC-1001", "AAPL");
+        long id = submitAndGetId("ACC-1001");
 
         mockMvc.perform(get("/api/trades/{id}/events", id))
                 .andExpect(status().isOk())
@@ -107,9 +107,9 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void filtersByStatusAndAccount() throws Exception {
-        submitAndGetId("ACC-1001", "AAPL");
-        submitAndGetId("ACC-1002", "AAPL");
-        submitAndGetId("ACC-1004", "AAPL");
+        submitAndGetId("ACC-1001");
+        submitAndGetId("ACC-1002");
+        submitAndGetId("ACC-1004");
 
         mockMvc.perform(get("/api/trades").param("status", "ACCEPTED"))
                 .andExpect(jsonPath("$.totalElements").value(2));
@@ -120,9 +120,9 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void listIsNewestFirstAndPaged() throws Exception {
-        long first = submitAndGetId("ACC-1001", "AAPL");
-        long second = submitAndGetId("ACC-1001", "MSFT");
-        submitAndGetId("ACC-1001", "KO");
+        long first = submitAndGetId("ACC-1001");
+        long second = submitAndGetId("ACC-1001");
+        submitAndGetId("ACC-1001");
 
         mockMvc.perform(get("/api/trades").param("size", "2").param("page", "1"))
                 .andExpect(jsonPath("$.content", hasSize(1)))
@@ -147,7 +147,7 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void acceptedTradeCanBeCancelled() throws Exception {
-        long id = submitAndGetId("ACC-1001", "AAPL");
+        long id = submitAndGetId("ACC-1001");
 
         mockMvc.perform(post("/api/trades/{id}/cancel", id)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -161,7 +161,7 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void rejectedTradeCannotBeCancelled() throws Exception {
-        long id = submitAndGetId("ACC-1004", "AAPL");
+        long id = submitAndGetId("ACC-1004");
 
         mockMvc.perform(post("/api/trades/{id}/cancel", id)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -171,7 +171,7 @@ class TradeApiTest extends IntegrationTest {
 
     @Test
     void cancelRequiresAReason() throws Exception {
-        long id = submitAndGetId("ACC-1001", "AAPL");
+        long id = submitAndGetId("ACC-1001");
 
         mockMvc.perform(post("/api/trades/{id}/cancel", id)
                         .contentType(MediaType.APPLICATION_JSON)

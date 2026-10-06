@@ -102,7 +102,7 @@ public class Trade {
     }
 
     public void accept() {
-        changeStatus(TradeStatus.ACCEPTED, "Accepted for settlement", SYSTEM_USER);
+        changeStatus(TradeStatus.ACCEPTED, "Passed risk checks", SYSTEM_USER);
     }
 
     public void reject(Rejection rejection) {

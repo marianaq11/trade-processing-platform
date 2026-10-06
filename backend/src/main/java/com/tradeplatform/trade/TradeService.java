@@ -17,6 +17,7 @@ import com.tradeplatform.common.NotFoundException;
 import com.tradeplatform.common.PageResponse;
 import com.tradeplatform.instrument.Instrument;
 import com.tradeplatform.instrument.InstrumentRepository;
+import com.tradeplatform.risk.RiskCheckService;
 
 @Service
 public class TradeService {
@@ -24,13 +25,16 @@ public class TradeService {
     private final TradeRepository tradeRepository;
     private final AccountRepository accountRepository;
     private final InstrumentRepository instrumentRepository;
+    private final RiskCheckService riskCheckService;
     private final Clock clock;
 
     public TradeService(TradeRepository tradeRepository, AccountRepository accountRepository,
-                        InstrumentRepository instrumentRepository, Clock clock) {
+                        InstrumentRepository instrumentRepository, RiskCheckService riskCheckService,
+                        Clock clock) {
         this.tradeRepository = tradeRepository;
         this.accountRepository = accountRepository;
         this.instrumentRepository = instrumentRepository;
+        this.riskCheckService = riskCheckService;
         this.clock = clock;
     }
 
@@ -60,6 +64,12 @@ public class TradeService {
             return;
         }
         trade.markValidated();
+
+        Optional<Rejection> riskFailure = riskCheckService.check(trade);
+        if (riskFailure.isPresent()) {
+            trade.reject(riskFailure.get());
+            return;
+        }
         trade.accept();
     }
 

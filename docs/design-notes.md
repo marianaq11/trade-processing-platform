@@ -44,9 +44,14 @@ Allowed transitions live in the `TradeStatus` enum. Every transition writes a ro
 - Max gross notional per trading day (sum of ACCEPTED trades today + this one)
 - Price tolerance: price must be within X% of the instrument's reference price ("fat finger" check)
 
+An account with no limits configured gets every trade rejected (`NO_RISK_LIMITS`). Failing
+closed seemed safer than letting unlimited trading through by accident.
+
 The daily limit has a race: two trades for the same account could both read the same
-running total and both pass. The risk check locks the account row (`SELECT ... FOR UPDATE`)
-so checks for the same account run one at a time.
+running total and both pass. The risk check locks the account's `risk_limit` row
+(`SELECT ... FOR UPDATE`) so checks for the same account run one at a time.
+`RiskCheckIntegrationTest` fires 8 trades at once to check this. When I took the lock out,
+all 8 got accepted against a limit that only fits 4.
 
 ## Duplicate submissions
 
