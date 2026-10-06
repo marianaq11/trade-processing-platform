@@ -2,6 +2,7 @@ package com.tradeplatform.trade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,11 +18,13 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeplatform.IntegrationTest;
 
+@WithMockUser(username = "trader1", roles = "TRADER")
 class DuplicateSubmissionTest extends IntegrationTest {
 
     @Autowired
@@ -32,7 +35,9 @@ class DuplicateSubmissionTest extends IntegrationTest {
                 {"clientTradeId": "%s", "accountCode": "%s", "symbol": "AAPL",
                  "side": "BUY", "quantity": %d, "price": 230.00}
                 """.formatted(clientTradeId, account, quantity);
-        return mockMvc.perform(post("/api/trades").contentType(MediaType.APPLICATION_JSON).content(body));
+        return mockMvc.perform(post("/api/trades").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     private int tradeCount() {

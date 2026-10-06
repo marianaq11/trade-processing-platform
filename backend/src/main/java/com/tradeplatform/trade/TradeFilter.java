@@ -7,7 +7,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import jakarta.persistence.criteria.Predicate;
 
-public record TradeFilter(TradeStatus status, String accountCode, String symbol) {
+public record TradeFilter(TradeStatus status, String accountCode, String symbol, String submittedBy) {
 
     Specification<Trade> toSpecification() {
         return (root, query, cb) -> {
@@ -20,6 +20,9 @@ public record TradeFilter(TradeStatus status, String accountCode, String symbol)
             }
             if (symbol != null && !symbol.isBlank()) {
                 predicates.add(cb.equal(root.get("instrument").get("symbol"), symbol.toUpperCase()));
+            }
+            if (submittedBy != null) {
+                predicates.add(cb.equal(root.get("submittedBy"), submittedBy));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };

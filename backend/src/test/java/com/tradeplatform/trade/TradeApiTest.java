@@ -2,6 +2,7 @@ package com.tradeplatform.trade;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,11 +12,13 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeplatform.IntegrationTest;
 
+@WithMockUser(username = "trader1", roles = "TRADER")
 class TradeApiTest extends IntegrationTest {
 
     private ResultActions submit(String account, String symbol, String side, long quantity, String price)
@@ -24,7 +27,9 @@ class TradeApiTest extends IntegrationTest {
                 {"clientTradeId": "%s", "accountCode": "%s", "symbol": "%s",
                  "side": "%s", "quantity": %d, "price": %s}
                 """.formatted(UUID.randomUUID(), account, symbol, side, quantity, price);
-        return mockMvc.perform(post("/api/trades").contentType(MediaType.APPLICATION_JSON).content(body));
+        return mockMvc.perform(post("/api/trades").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     private long submitAndGetId(String account) throws Exception {
@@ -80,7 +85,9 @@ class TradeApiTest extends IntegrationTest {
         String body = """
                 {"accountCode": "ACC-1001", "symbol": "AAPL", "side": "BUY", "quantity": -5, "price": 230}
                 """;
-        mockMvc.perform(post("/api/trades").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/trades").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.clientTradeId").exists())
                 .andExpect(jsonPath("$.errors.quantity").exists());
@@ -149,7 +156,7 @@ class TradeApiTest extends IntegrationTest {
     void acceptedTradeCanBeCancelled() throws Exception {
         long id = submitAndGetId("ACC-1001");
 
-        mockMvc.perform(post("/api/trades/{id}/cancel", id)
+        mockMvc.perform(post("/api/trades/{id}/cancel", id).with(csrf()).with(OPS_USER)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\": \"Client called to cancel\"}"))
                 .andExpect(status().isOk())
@@ -163,7 +170,7 @@ class TradeApiTest extends IntegrationTest {
     void rejectedTradeCannotBeCancelled() throws Exception {
         long id = submitAndGetId("ACC-1004");
 
-        mockMvc.perform(post("/api/trades/{id}/cancel", id)
+        mockMvc.perform(post("/api/trades/{id}/cancel", id).with(csrf()).with(OPS_USER)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\": \"test\"}"))
                 .andExpect(status().isConflict());
@@ -173,7 +180,7 @@ class TradeApiTest extends IntegrationTest {
     void cancelRequiresAReason() throws Exception {
         long id = submitAndGetId("ACC-1001");
 
-        mockMvc.perform(post("/api/trades/{id}/cancel", id)
+        mockMvc.perform(post("/api/trades/{id}/cancel", id).with(csrf()).with(OPS_USER)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\": \"\"}"))
                 .andExpect(status().isBadRequest())

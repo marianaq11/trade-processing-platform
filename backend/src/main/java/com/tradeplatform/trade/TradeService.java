@@ -53,12 +53,12 @@ public class TradeService {
         } catch (DataIntegrityViolationException e) {
             // Two requests with the same clientTradeId both got past the duplicate check and
             // the unique constraint stopped the second insert. Return what the first one created.
-            return transactionTemplate.execute(status -> findDuplicate(request).orElseThrow(() -> e));
+            return transactionTemplate.execute(status -> findDuplicate(request, submittedBy).orElseThrow(() -> e));
         }
     }
 
     private SubmitResult submitInTransaction(SubmitTradeRequest request, String submittedBy) {
-        Optional<SubmitResult> duplicate = findDuplicate(request);
+        Optional<SubmitResult> duplicate = findDuplicate(request, submittedBy);
         if (duplicate.isPresent()) {
             return duplicate.get();
         }
@@ -80,12 +80,14 @@ public class TradeService {
         return new SubmitResult(TradeResponse.from(trade), true);
     }
 
-    private Optional<SubmitResult> findDuplicate(SubmitTradeRequest request) {
+    private Optional<SubmitResult> findDuplicate(SubmitTradeRequest request, String submittedBy) {
         return tradeRepository.findByAccountCodeAndClientTradeId(request.accountCode(), request.clientTradeId())
                 .map(existing -> {
-                    if (!isSameTrade(existing, request)) {
+                    // Only the same user resubmitting the same trade counts as a retry. Anything
+                    // else is a conflict, and we don't hand back someone else's trade.
+                    if (!existing.getSubmittedBy().equals(submittedBy) || !isSameTrade(existing, request)) {
                         throw new DuplicateTradeException("clientTradeId " + request.clientTradeId()
-                                + " was already used for a different trade (id " + existing.getId() + ")");
+                                + " was already used for a different trade");
                     }
                     return new SubmitResult(TradeResponse.from(existing), false);
                 });
@@ -133,27 +135,31 @@ public class TradeService {
                 .map(TradeResponse::from));
     }
 
+    // restrictToSubmitter is set for traders, who can only see their own trades.
     @Transactional(readOnly = true)
-    public TradeResponse getTrade(long id) {
-        return TradeResponse.from(findTrade(id));
+    public TradeResponse getTrade(long id, String restrictToSubmitter) {
+        return TradeResponse.from(findTrade(id, restrictToSubmitter));
     }
 
     @Transactional(readOnly = true)
-    public List<TradeEventResponse> getEvents(long id) {
-        return findTrade(id).getEvents().stream()
+    public List<TradeEventResponse> getEvents(long id, String restrictToSubmitter) {
+        return findTrade(id, restrictToSubmitter).getEvents().stream()
                 .map(TradeEventResponse::from)
                 .toList();
     }
 
     @Transactional
     public TradeResponse cancel(long id, String reason, String cancelledBy) {
-        Trade trade = findTrade(id);
+        Trade trade = findTrade(id, null);
         trade.cancel(reason, cancelledBy);
         return TradeResponse.from(trade);
     }
 
-    private Trade findTrade(long id) {
+    // Someone else's trade is reported as not found rather than forbidden, so a trader
+    // can't probe which trade ids exist.
+    private Trade findTrade(long id, String restrictToSubmitter) {
         return tradeRepository.findById(id)
+                .filter(trade -> restrictToSubmitter == null || trade.getSubmittedBy().equals(restrictToSubmitter))
                 .orElseThrow(() -> new NotFoundException("Trade " + id + " not found"));
     }
 }

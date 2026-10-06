@@ -25,3 +25,14 @@ npm run dev                   # UI on localhost:5173, proxies /api to the backen
 ```
 
 Backend tests use Testcontainers, so Docker needs to be running for `./mvnw test`.
+
+## Demo users
+
+Seeded by a Flyway migration. All use the password `demo-pass`.
+
+| User      | Role         | Can                                         |
+|-----------|--------------|---------------------------------------------|
+| `trader1` | Trader       | Submit trades, see their own trades         |
+| `trader2` | Trader       | Same as above (useful for testing isolation) |
+| `ops1`    | Operations   | See all trades, cancel accepted trades      |
+| `risk1`   | Risk manager | See all trades                              |

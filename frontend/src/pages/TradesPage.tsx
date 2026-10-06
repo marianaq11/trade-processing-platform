@@ -1,5 +1,6 @@
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useApi } from '../api/useApi.ts'
+import { useCurrentUser } from '../auth/AuthContext.tsx'
 import { TRADE_STATUSES, type Account, type Instrument, type Page, type Trade } from '../api/types.ts'
 import StatusBadge from '../components/StatusBadge.tsx'
 import { formatDateTime, formatMoney, formatPrice, formatQuantity } from '../format.ts'
@@ -8,6 +9,7 @@ const PAGE_SIZE = 25
 
 export default function TradesPage() {
   const navigate = useNavigate()
+  const user = useCurrentUser()
   // Filters live in the URL so a filtered view can be bookmarked or shared.
   const [params, setParams] = useSearchParams()
   const status = params.get('status') ?? ''
@@ -48,9 +50,11 @@ export default function TradesPage() {
           <button className="btn" onClick={trades.reload} disabled={trades.loading}>
             Refresh
           </button>
-          <Link className="btn btn-primary" to="/trades/new">
-            New trade
-          </Link>
+          {user.role === 'TRADER' && (
+            <Link className="btn btn-primary" to="/trades/new">
+              New trade
+            </Link>
+          )}
         </div>
       </div>
 

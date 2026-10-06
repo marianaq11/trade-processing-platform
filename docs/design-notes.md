@@ -64,6 +64,25 @@ account in the DB.
 The unique constraint is the real guard. The lookup beforehand just makes the common case
 cheap.
 
+Retrying only counts if it's the same user. If trader2 sends trader1's `clientTradeId` for the
+same account, that's a 409 rather than handing back trader1's trade.
+
+## Login and roles
+
+Spring Security form login with a server-side session (HttpOnly cookie). I went with sessions
+over JWT because there's one backend, so there's no need for stateless tokens, and it avoids
+storing a token in localStorage. Since the session lives in a cookie, CSRF protection stays on:
+Spring sets an `XSRF-TOKEN` cookie and the frontend sends it back as the `X-XSRF-TOKEN` header.
+
+| Role         | Submit | Cancel | Sees            |
+|--------------|--------|--------|-----------------|
+| TRADER       | yes    | no     | own trades only |
+| OPERATIONS   | no     | yes    | all trades      |
+| RISK_MANAGER | no     | no     | all trades      |
+
+A trader asking for another trader's trade gets 404, not 403, so ids can't be probed.
+The role rules for each URL are all in `SecurityConfig`.
+
 ## Settlement date
 
 T+1 business days from trade date (the US moved to T+1 in May 2024). Weekends are skipped,

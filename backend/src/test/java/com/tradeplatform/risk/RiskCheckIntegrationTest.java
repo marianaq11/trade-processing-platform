@@ -1,6 +1,7 @@
 package com.tradeplatform.risk;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,6 +18,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.tradeplatform.IntegrationTest;
@@ -27,6 +29,7 @@ import com.tradeplatform.trade.TradeService;
 import com.tradeplatform.trade.TradeStatus;
 
 // ACC-1002 is seeded with: 250k per trade, 1M per day, 5% price tolerance. AAPL reference is 230.
+@WithMockUser(username = "trader1", roles = "TRADER")
 class RiskCheckIntegrationTest extends IntegrationTest {
 
     @Autowired
@@ -37,7 +40,9 @@ class RiskCheckIntegrationTest extends IntegrationTest {
                 {"clientTradeId": "%s", "accountCode": "%s", "symbol": "AAPL",
                  "side": "BUY", "quantity": %d, "price": %s}
                 """.formatted(UUID.randomUUID(), account, quantity, price);
-        return mockMvc.perform(post("/api/trades").contentType(MediaType.APPLICATION_JSON).content(body));
+        return mockMvc.perform(post("/api/trades").with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     @Test
@@ -80,7 +85,7 @@ class RiskCheckIntegrationTest extends IntegrationTest {
             submit("ACC-1002", 1000, "230.00");
         }
         Long id = jdbcTemplate.queryForObject("SELECT max(id) FROM trade", Long.class);
-        mockMvc.perform(post("/api/trades/{id}/cancel", id)
+        mockMvc.perform(post("/api/trades/{id}/cancel", id).with(csrf()).with(OPS_USER)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\": \"duplicate booking\"}"));
 

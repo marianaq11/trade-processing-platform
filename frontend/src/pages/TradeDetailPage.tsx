@@ -2,12 +2,14 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { apiPost, errorMessage } from '../api/client.ts'
 import { useApi } from '../api/useApi.ts'
+import { useCurrentUser } from '../auth/AuthContext.tsx'
 import type { Trade, TradeEvent } from '../api/types.ts'
 import StatusBadge from '../components/StatusBadge.tsx'
 import { formatDateTime, formatMoney, formatPrice, formatQuantity } from '../format.ts'
 
 export default function TradeDetailPage() {
   const { id } = useParams()
+  const user = useCurrentUser()
   const trade = useApi<Trade>(`/api/trades/${id}`)
   const events = useApi<TradeEvent[]>(`/api/trades/${id}/events`)
 
@@ -63,7 +65,9 @@ export default function TradeDetailPage() {
         </Detail>
       </dl>
 
-      {t.status === 'ACCEPTED' && <CancelTrade tradeId={t.id} onCancelled={reloadAll} />}
+      {t.status === 'ACCEPTED' && user.role === 'OPERATIONS' && (
+        <CancelTrade tradeId={t.id} onCancelled={reloadAll} />
+      )}
 
       <h2>History</h2>
       {events.error && <p className="error-banner">{events.error}</p>}
