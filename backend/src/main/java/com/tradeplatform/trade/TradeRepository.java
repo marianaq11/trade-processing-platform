@@ -3,6 +3,7 @@ package com.tradeplatform.trade;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,8 @@ public interface TradeRepository extends JpaRepository<Trade, Long>, JpaSpecific
     @Override
     @EntityGraph(attributePaths = {"account", "instrument"})
     Page<Trade> findAll(Specification<Trade> spec, Pageable pageable);
+
+    Optional<Trade> findByAccountCodeAndClientTradeId(String accountCode, String clientTradeId);
 
     @Query("""
             select coalesce(sum(t.notional), 0) from Trade t

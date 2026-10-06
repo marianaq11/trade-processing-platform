@@ -5,10 +5,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.tradeplatform.account.Account;
 import com.tradeplatform.account.AccountRepository;
@@ -26,20 +28,41 @@ public class TradeService {
     private final AccountRepository accountRepository;
     private final InstrumentRepository instrumentRepository;
     private final RiskCheckService riskCheckService;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     public TradeService(TradeRepository tradeRepository, AccountRepository accountRepository,
                         InstrumentRepository instrumentRepository, RiskCheckService riskCheckService,
-                        Clock clock) {
+                        TransactionTemplate transactionTemplate, Clock clock) {
         this.tradeRepository = tradeRepository;
         this.accountRepository = accountRepository;
         this.instrumentRepository = instrumentRepository;
         this.riskCheckService = riskCheckService;
+        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
 
-    @Transactional
-    public TradeResponse submit(SubmitTradeRequest request, String submittedBy) {
+    public record SubmitResult(TradeResponse trade, boolean created) {
+    }
+
+    // Uses TransactionTemplate instead of @Transactional because the duplicate fallback
+    // has to run in a new transaction after the failed insert has rolled back.
+    public SubmitResult submit(SubmitTradeRequest request, String submittedBy) {
+        try {
+            return transactionTemplate.execute(status -> submitInTransaction(request, submittedBy));
+        } catch (DataIntegrityViolationException e) {
+            // Two requests with the same clientTradeId both got past the duplicate check and
+            // the unique constraint stopped the second insert. Return what the first one created.
+            return transactionTemplate.execute(status -> findDuplicate(request).orElseThrow(() -> e));
+        }
+    }
+
+    private SubmitResult submitInTransaction(SubmitTradeRequest request, String submittedBy) {
+        Optional<SubmitResult> duplicate = findDuplicate(request);
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
+
         // Unknown references are a bad request rather than a rejected trade: there's no
         // real account or instrument to attach the trade to.
         Account account = accountRepository.findByCode(request.accountCode())
@@ -54,7 +77,25 @@ public class TradeService {
         tradeRepository.save(trade);
 
         process(trade);
-        return TradeResponse.from(trade);
+        return new SubmitResult(TradeResponse.from(trade), true);
+    }
+
+    private Optional<SubmitResult> findDuplicate(SubmitTradeRequest request) {
+        return tradeRepository.findByAccountCodeAndClientTradeId(request.accountCode(), request.clientTradeId())
+                .map(existing -> {
+                    if (!isSameTrade(existing, request)) {
+                        throw new DuplicateTradeException("clientTradeId " + request.clientTradeId()
+                                + " was already used for a different trade (id " + existing.getId() + ")");
+                    }
+                    return new SubmitResult(TradeResponse.from(existing), false);
+                });
+    }
+
+    private static boolean isSameTrade(Trade existing, SubmitTradeRequest request) {
+        return existing.getInstrument().getSymbol().equalsIgnoreCase(request.symbol())
+                && existing.getSide() == request.side()
+                && existing.getQuantity() == request.quantity()
+                && existing.getPrice().compareTo(request.price()) == 0;
     }
 
     private void process(Trade trade) {

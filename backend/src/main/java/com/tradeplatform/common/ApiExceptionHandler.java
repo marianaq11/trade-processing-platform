@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import com.tradeplatform.trade.DuplicateTradeException;
 import com.tradeplatform.trade.TradeStateException;
 
 // Extending ResponseEntityExceptionHandler means Spring's own exceptions (bad JSON, wrong
@@ -33,8 +34,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    @ExceptionHandler(TradeStateException.class)
-    ProblemDetail handleTradeState(TradeStateException ex) {
+    @ExceptionHandler({TradeStateException.class, DuplicateTradeException.class})
+    ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 

@@ -102,7 +102,7 @@ class RiskCheckIntegrationTest extends IntegrationTest {
                 start.await();
                 SubmitTradeRequest request = new SubmitTradeRequest(UUID.randomUUID().toString(),
                         "ACC-1002", "AAPL", Side.BUY, 1000L, new BigDecimal("230.00"));
-                return tradeService.submit(request, "load-test");
+                return tradeService.submit(request, "load-test").trade();
             }));
         }
         start.countDown();

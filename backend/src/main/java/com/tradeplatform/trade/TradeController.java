@@ -31,10 +31,15 @@ public class TradeController {
         this.tradeService = tradeService;
     }
 
+    // 201 for a new trade, 200 if this clientTradeId was already submitted with the same details.
+    // A rejected trade is still 201: it was recorded, the rejection is a business outcome.
     @PostMapping
     public ResponseEntity<TradeResponse> submitTrade(@Valid @RequestBody SubmitTradeRequest request) {
-        TradeResponse trade = tradeService.submit(request, CURRENT_USER);
-        return ResponseEntity.created(URI.create("/api/trades/" + trade.id())).body(trade);
+        TradeService.SubmitResult result = tradeService.submit(request, CURRENT_USER);
+        if (!result.created()) {
+            return ResponseEntity.ok(result.trade());
+        }
+        return ResponseEntity.created(URI.create("/api/trades/" + result.trade().id())).body(result.trade());
     }
 
     @GetMapping
