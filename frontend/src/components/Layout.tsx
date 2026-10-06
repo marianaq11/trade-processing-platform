@@ -6,7 +6,10 @@ export default function Layout() {
       <header className="topbar">
         <span className="topbar-title">Trade Platform</span>
         <nav>
-          <NavLink to="/trades">Trades</NavLink>
+          <NavLink to="/trades" end>
+            Trades
+          </NavLink>
+          <NavLink to="/trades/new">New trade</NavLink>
         </nav>
       </header>
       <main className="page">
