@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext.tsx'
 import { ErrorBanner } from '../components/Feedback.tsx'
 
-// Seeded by the V5 migration; listed here so someone trying the demo doesn't need the README.
+// Demo users from the V5 migration.
 const DEMO_USERS = [
   { username: 'trader1', role: 'Trader' },
   { username: 'trader2', role: 'Trader' },

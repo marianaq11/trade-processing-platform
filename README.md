@@ -112,7 +112,7 @@ On macOS/Linux use `./mvnw test` and `npm test`. The backend tests start a real 
 (Testcontainers), so Docker needs to be running. GitHub Actions runs both suites, the frontend
 lint/type-check/build, and the Docker image builds on every push.
 
-## Interesting engineering decisions
+## Implementation notes
 
 **Concurrent daily limit checks.** Two trades for the same account arriving together could both
 read the same "used today" total and both pass. The risk check locks the account's limit row
@@ -127,12 +127,12 @@ Sending the same one again returns the original trade. If two identical requests
 inside it, and `@Version` on the trade catches a cancel and a settle racing each other. A test
 runs three settlement jobs at the same time and checks every trade settled exactly once.
 
-**Entitlements are checked before anything else.** Including the duplicate lookup, so resubmitting
-an existing trade can't get around them. An account code that doesn't exist gets the same 403
-as one you aren't entitled to, so the API doesn't reveal which accounts exist.
+**Entitlements are checked first.** This happens before the duplicate lookup, so resubmitting an
+existing trade can't get around it. An account code that doesn't exist gets the same 403 as one
+you aren't entitled to, so the API doesn't reveal which accounts exist.
 
-**Sessions instead of JWT.** There's one backend, so login uses Spring Security's normal server-side
-session with an HttpOnly cookie rather than a token stored in the browser. Because the session is
+**Sessions instead of JWT.** There's only one backend, so login uses a normal Spring Security
+session with an HttpOnly cookie instead of a token stored in the browser. Because the session is
 a cookie, CSRF protection stays on.
 
 More detail is in [docs/design-notes.md](docs/design-notes.md).

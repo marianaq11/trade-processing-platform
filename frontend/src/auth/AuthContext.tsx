@@ -33,9 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true
   }, [])
 
-  // Signing out also goes back to "/", so whoever signs in next lands on their own home page
-  // rather than a page that belonged to the previous user's role. (A session that expires
-  // keeps its URL, so signing back in returns to the same page.)
+  // Go back to "/" so the next person to sign in starts on their own home page, not a page
+  // for the previous user's role. An expired session keeps its URL instead.
   const logout = useCallback(async () => {
     await apiPost('/api/auth/logout').catch(() => {})
     setUser(null)

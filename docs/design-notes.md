@@ -66,10 +66,6 @@ all 8 got accepted against a limit that only fits 4.
 `version` the user loaded. Each field that actually changed gets a row in `risk_limit_change`
 (old value, new value, reason, who, when). Saving without changes writes nothing.
 
-The audit table is a plain table for this one purpose rather than a generic "audit framework".
-Trade history already has its own table (`trade_event`), and those were the only two things
-that needed an audit trail.
-
 Two risk managers saving at the same time: the update takes the same row lock as the risk
 check, then compares versions. The second save waits for the first, sees the version moved
 and gets a 409 telling them who changed it, instead of silently overwriting.
@@ -113,10 +109,10 @@ Integration tests swap in a `MutableClock`, so "today" is a fixed Monday unless 
 
 ## Login and roles
 
-Spring Security form login with a server-side session (HttpOnly, SameSite=Lax cookie). I went
-with sessions over JWT because there's one backend, so there's no need for stateless tokens, and
-it avoids storing a token in localStorage. Since the session lives in a cookie, CSRF protection
-stays on: Spring sets an `XSRF-TOKEN` cookie and the frontend sends it back as a header.
+Spring Security form login with a server-side session (HttpOnly, SameSite=Lax cookie). I used
+sessions instead of JWT because there's only one backend, and it avoids keeping a token in
+localStorage. Since the session lives in a cookie, CSRF protection stays on: Spring sets an
+`XSRF-TOKEN` cookie and the frontend sends it back as a header.
 
 | Role         | Can do                                        | Sees              |
 |--------------|-----------------------------------------------|-------------------|
@@ -132,7 +128,7 @@ not 403, so trade ids can't be probed.
 
 Roles say what kind of thing someone can do; entitlements say which accounts a trader can do
 it on. It's one join table, `account_entitlement (user_id, account_id)`, mapped as a
-`@ManyToMany` on `AppUser`. There's no generic permissions model because nothing else needs one.
+`@ManyToMany` on `AppUser`.
 
 - Submitting a trade checks the entitlement first, before the duplicate lookup, so resubmitting
   an existing `clientTradeId` can't be used to get around it.

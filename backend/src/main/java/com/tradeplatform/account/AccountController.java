@@ -21,8 +21,6 @@ public class AccountController {
         this.accountRepository = accountRepository;
     }
 
-    // Traders only get the accounts they're entitled to trade on; nothing about the others.
-    // Operations and risk managers see every account.
     @GetMapping
     public List<AccountResponse> listAccounts(Authentication authentication) {
         List<Account> accounts = Roles.of(authentication) == Role.TRADER

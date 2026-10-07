@@ -43,7 +43,7 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Makes sure the images in docker-compose.yml still build, since the README tells people to use them.
+  # Checks that the docker compose images still build.
   docker:
     runs-on: ubuntu-latest
     steps:
