@@ -14,3 +14,7 @@ spring:
     open-in-view: false
     properties:
       hibernate.jdbc.time_zone: UTC
+
+settlement:
+  # Weekdays at 6pm New York time, after the market closes.
+  cron: "0 0 18 * * MON-FRI"

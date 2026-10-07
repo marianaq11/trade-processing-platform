@@ -30,6 +30,17 @@ public interface TradeRepository extends JpaRepository<Trade, Long>, JpaSpecific
             """)
     BigDecimal sumNotional(long accountId, LocalDate tradeDate, Collection<TradeStatus> statuses);
 
+    @Query("""
+            select t.id from Trade t
+            where t.status = com.tradeplatform.trade.TradeStatus.ACCEPTED and t.settlementDate <= :date
+            order by t.settlementDate, t.id
+            """)
+    List<Long> findIdsDueForSettlement(LocalDate date);
+
+    long countByStatusAndSettlementDateLessThanEqual(TradeStatus status, LocalDate date);
+
+    long countByStatus(TradeStatus status);
+
     interface AccountTotal {
         Long getAccountId();
 

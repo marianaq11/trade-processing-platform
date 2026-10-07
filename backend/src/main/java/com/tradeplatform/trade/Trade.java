@@ -115,8 +115,9 @@ public class Trade {
         changeStatus(TradeStatus.CANCELLED, reason, cancelledBy);
     }
 
-    public void settle() {
-        changeStatus(TradeStatus.SETTLED, "Settled", SYSTEM_USER);
+    // settledBy is "system" for the scheduled run, or the user who started a manual run.
+    public void settle(String settledBy) {
+        changeStatus(TradeStatus.SETTLED, "Settled", settledBy);
     }
 
     private void changeStatus(TradeStatus next, String detail, String performedBy) {

@@ -14,7 +14,8 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-@SpringBootTest
+// Scheduled settlement is switched off so it can't fire in the middle of a test.
+@SpringBootTest(properties = "settlement.cron=-")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Sql("/reset-test-data.sql")

@@ -74,6 +74,34 @@ class TradeTest {
     }
 
     @Test
+    void settlingRecordsWhoRanIt() {
+        Trade trade = newTrade();
+        trade.markValidated();
+        trade.accept();
+        trade.settle("ops-bob");
+
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.SETTLED);
+        assertThat(trade.getEvents().getLast().getPerformedBy()).isEqualTo("ops-bob");
+    }
+
+    @Test
+    void onlyAcceptedTradesCanSettle() {
+        Trade received = newTrade();
+        Trade rejected = newTrade();
+        rejected.reject(new Rejection(RejectionReason.ACCOUNT_SUSPENDED, "suspended"));
+        Trade cancelled = newTrade();
+        cancelled.markValidated();
+        cancelled.accept();
+        cancelled.cancel("mistake", "ops-bob");
+
+        for (Trade trade : new Trade[] {received, rejected, cancelled}) {
+            TradeStatus before = trade.getStatus();
+            assertThatThrownBy(() -> trade.settle("system")).isInstanceOf(TradeStateException.class);
+            assertThat(trade.getStatus()).isEqualTo(before);
+        }
+    }
+
+    @Test
     void cannotAcceptWithoutValidatingFirst() {
         Trade trade = newTrade();
 
