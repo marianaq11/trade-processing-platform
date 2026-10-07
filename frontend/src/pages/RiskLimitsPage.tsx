@@ -144,7 +144,7 @@ function Usage({ used, limit }: { used: number; limit: number | null }) {
     <div className="usage">
       <div className="usage-numbers">
         <span className="tabular">{formatMoney(used)}</span>
-        <span className="usage-pct">{pct.toFixed(0)}%</span>
+        <span className="usage-pct">{pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%</span>
       </div>
       <div className={`usage-bar usage-${level}`} aria-hidden="true">
         <span style={{ width: `${Math.min(pct, 100)}%` }} />
