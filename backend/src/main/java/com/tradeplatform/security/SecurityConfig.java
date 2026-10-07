@@ -41,6 +41,9 @@ public class SecurityConfig {
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler()))
                 // Return 401 instead of redirecting to a login page; the React app handles that.
                 .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                // The request cache exists to redirect back after a login page, which an SPA doesn't
+                // use. Left on, it creates a session for every anonymous request that gets a 401.
+                .requestCache(cache -> cache.disable())
                 // Cookie-based CSRF token that the frontend sends back in the X-XSRF-TOKEN header.
                 .csrf(csrf -> csrf.spa());
         return http.build();

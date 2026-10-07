@@ -58,7 +58,7 @@ public class TradeController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate,
             @RequestParam(defaultValue = "time") @Pattern(regexp = "time|notional|settlementDate") String sort,
             @RequestParam(defaultValue = "desc") @Pattern(regexp = "asc|desc") String direction,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "0") @Min(0) @Max(10_000) int page,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int size,
             Authentication authentication) {
         TradeFilter filter = new TradeFilter(status, account, symbol, side, tradeDate, ownTradesOnly(authentication));

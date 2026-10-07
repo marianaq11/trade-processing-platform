@@ -43,7 +43,7 @@ public class RiskLimitController {
             @RequestParam(required = false) String account,
             @RequestParam(required = false) RiskLimitField field,
             @RequestParam(required = false) String changedBy,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "0") @Min(0) @Max(10_000) int page,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int size) {
         return riskLimitService.findChanges(new RiskLimitChangeFilter(account, field, changedBy), page, size);
     }

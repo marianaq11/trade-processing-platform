@@ -14,9 +14,20 @@ spring:
     open-in-view: false
     properties:
       hibernate.jdbc.time_zone: UTC
+  jackson:
+    deserialization:
+      # Otherwise a quantity of 1.5 quietly becomes 1.
+      accept-float-as-int: false
   flyway:
     # db/demo adds sample trade history for local runs. Tests only load db/migration.
     locations: classpath:db/migration,classpath:db/demo
+
+server:
+  servlet:
+    session:
+      cookie:
+        # CSRF tokens already protect state-changing requests; this is a second layer.
+        same-site: lax
 
 settlement:
   # Weekdays at 6pm New York time, after the market closes.

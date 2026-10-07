@@ -11,9 +11,10 @@ import jakarta.validation.constraints.Size;
 
 public record SubmitTradeRequest(
         @NotBlank @Size(max = 64) String clientTradeId,
-        @NotBlank String accountCode,
-        @NotBlank String symbol,
+        @NotBlank @Size(max = 20) String accountCode,
+        @NotBlank @Size(max = 10) String symbol,
         @NotNull Side side,
         @NotNull @Positive @Max(10_000_000) Long quantity,
-        @NotNull @Positive @Digits(integer = 15, fraction = 4) BigDecimal price) {
+        // Capped so that max price x max quantity still fits the NUMERIC(19,4) notional column.
+        @NotNull @Positive @Digits(integer = 7, fraction = 4) BigDecimal price) {
 }

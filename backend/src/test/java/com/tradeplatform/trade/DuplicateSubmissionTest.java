@@ -18,6 +18,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -84,6 +85,42 @@ class DuplicateSubmissionTest extends IntegrationTest {
         submit("order-1", "ACC-1003", 100)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
+    }
+
+    @Test
+    void twoPeopleCancellingAtOnceOnlyCancelsOnce() throws Exception {
+        long id = tradeService.submit(new SubmitTradeRequest("to-cancel", "ACC-1001", "AAPL", Side.BUY, 100L,
+                new BigDecimal("230.00")), "alice").trade().id();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+        for (String user : List.of("ops-a", "ops-b")) {
+            results.add(executor.submit(() -> {
+                start.await();
+                try {
+                    tradeService.cancel(id, "cancelled by " + user, user);
+                    return true;
+                } catch (ObjectOptimisticLockingFailureException | TradeStateException e) {
+                    // the loser sees either the version clash or a trade that's already cancelled
+                    return false;
+                }
+            }));
+        }
+        start.countDown();
+
+        int succeeded = 0;
+        for (Future<Boolean> result : results) {
+            if (result.get()) {
+                succeeded++;
+            }
+        }
+        executor.shutdown();
+
+        assertThat(succeeded).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM trade_event WHERE trade_id = ? AND to_status = 'CANCELLED'", Integer.class, id))
+                .isEqualTo(1);
     }
 
     @Test

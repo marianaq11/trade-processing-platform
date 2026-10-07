@@ -19,6 +19,7 @@ import {
 import { rejectionLabels, statusLabels } from '../labels.ts'
 
 const MAX_QUANTITY = 10_000_000
+const MAX_PRICE = 9_999_999.9999
 
 interface Outcome {
   trade: Trade
@@ -74,6 +75,7 @@ export default function NewTradePage() {
     else if (quantity > MAX_QUANTITY) errors.quantity = `Can't be more than ${formatQuantity(MAX_QUANTITY)}`
     if (price === undefined) errors.price = 'Enter a price'
     else if (price <= 0) errors.price = 'Must be greater than 0'
+    else if (price > MAX_PRICE) errors.price = `Can't be more than ${formatPrice(MAX_PRICE)}`
     else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
     return errors
   }

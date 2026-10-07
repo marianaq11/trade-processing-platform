@@ -1,5 +1,6 @@
 package com.tradeplatform.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -13,10 +14,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeplatform.IntegrationTest;
+
+import jakarta.servlet.http.HttpSession;
 
 class SecurityTest extends IntegrationTest {
 
@@ -41,6 +45,16 @@ class SecurityTest extends IntegrationTest {
     void apiRequiresLogin() throws Exception {
         mockMvc.perform(get("/api/trades")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unauthorizedRequestsAreNotSavedInTheSession() throws Exception {
+        // With the request cache on, every anonymous 401 stored the request in a new session.
+        // (MockMvc makes its own session, so check the attribute rather than the session.)
+        MvcResult result = mockMvc.perform(get("/api/trades")).andExpect(status().isUnauthorized()).andReturn();
+
+        HttpSession session = result.getRequest().getSession(false);
+        assertThat(session == null ? null : session.getAttribute("SPRING_SECURITY_SAVED_REQUEST")).isNull();
     }
 
     @Test
