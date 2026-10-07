@@ -128,6 +128,25 @@ All the URL rules are in `SecurityConfig`. The frontend hides what a role can't 
 backend checks every request regardless. A trader asking for another trader's trade gets 404,
 not 403, so trade ids can't be probed.
 
+## Account entitlements
+
+Roles say what kind of thing someone can do; entitlements say which accounts a trader can do
+it on. It's one join table, `account_entitlement (user_id, account_id)`, mapped as a
+`@ManyToMany` on `AppUser`. There's no generic permissions model because nothing else needs one.
+
+- Submitting a trade checks the entitlement first, before the duplicate lookup, so resubmitting
+  an existing `clientTradeId` can't be used to get around it.
+- An account code that doesn't exist gets the same 403 as one the trader isn't entitled to, so
+  the API can't be used to find out which accounts exist.
+- `GET /api/accounts` only returns a trader's own accounts, which is also what fills the dropdown
+  on the trade form. Operations and risk managers see every account.
+- If an entitlement is removed, the trader can't book on that account any more but can still see
+  the trades they booked on it before.
+- A refused trade isn't stored as REJECTED. Rejections are for trades someone was allowed to
+  book; this is an access check, so it's a 403 and nothing is saved.
+
+Entitlements come from a migration; there's no admin screen for them.
+
 ## Input limits
 
 Found by poking at the API with curl:
@@ -144,9 +163,16 @@ to today's date, so a fresh database has something to show (including settled tr
 otherwise wouldn't appear until the next day). It only runs against empty tables and tests
 don't load it.
 
+## Docker
+
+`docker compose up --build` runs three containers: Postgres, the backend jar, and nginx serving
+the built React app. nginx also forwards `/api` to the backend, so the browser sees a single
+origin, the same as with the Vite dev server's proxy. That matters because login uses a session
+cookie and a CSRF cookie. The backend image skips tests because they need Docker themselves
+(Testcontainers); CI runs them.
+
 ## Not done
 
-- Accounts aren't assigned to traders, so any trader can book on any account.
 - No market holiday calendar.
 - No login rate limiting, password changes or user management; users come from a migration.
 - Processing is synchronous. A background worker with retries would be the next step if the

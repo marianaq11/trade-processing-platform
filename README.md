@@ -1,176 +1,145 @@
-# Trade Processing Platform
+# Trade Processing & Risk Platform
 
-A simplified version of what happens to an equity trade after someone books it. The trade is
-validated, checked against the account's risk limits, accepted or rejected with a reason, and
-settled one business day later. Every step is recorded, so you can always see what happened to
-a trade and who did it.
-
-I built this to learn how a system like this handles the parts that matter more than the happy
-path: duplicate requests, two people changing the same thing at once, audit trails, and making
-sure each role can only do what it's supposed to.
+A simplified version of what happens to a US equity trade after a trader books it. The trade is
+checked against the trader's account entitlements and the account's risk limits, then accepted
+or rejected with a reason, and settled one business day later (T+1). Every step is recorded, so
+you can always see what happened to a trade, who did it and why.
 
 ![Trades page](docs/screenshots/trades.png)
 
-## What it does
+## Features
 
-- **Trade entry**: traders book buy/sell trades for an account and a US stock. The form shows the
-  notional and settlement date before submitting.
-- **Validation and risk checks**: suspended accounts and untradable instruments are rejected,
-  then three per-account limits are checked: price close enough to the reference price, max
-  notional per trade, and max notional per day.
-- **Lifecycle and history**: every status change is stored with a timestamp, the user (or
-  `system`) and a reason, and shown as a timeline on the trade page.
-- **Risk limit management**: risk managers can set and change limits. Every change records the
-  old value, new value, who changed it and why, in an audit log.
-- **Settlement**: a scheduled job settles accepted trades on their settlement date (T+1).
-  Operations can also run it by hand.
-- **Cancellations**: operations can cancel an accepted trade before it settles, with a reason.
-- **Duplicate protection**: resubmitting the same trade (say, after a timeout) returns the
-  original instead of booking it twice.
+- **Trade lifecycle**: `RECEIVED → VALIDATED → ACCEPTED → SETTLED`, or `REJECTED` / `CANCELLED`
+  with a reason. Each trade has a timeline of every status change.
+- **Risk controls**: per-account limits on price (vs. a reference price), notional per trade and
+  notional per day. Risk managers can change them, with a required reason.
+- **Account entitlements**: traders can only book trades on the accounts they're assigned to.
+- **Duplicate protection**: resubmitting the same trade (after a timeout, say) returns the original
+  instead of booking it twice.
+- **Audit trail**: every risk limit change records the old value, the new value, who changed it and why.
+- **Settlement**: a scheduled job settles accepted trades on their settlement date. Operations can
+  also run it by hand.
+- **Role-based access**: traders, operations and risk managers each get their own pages and
+  actions, enforced by the backend.
 
-## Trade lifecycle
+| Trade detail | New trade | Risk limits |
+|---|---|---|
+| ![Trade detail](docs/screenshots/trade-detail.png) | ![New trade](docs/screenshots/new-trade.png) | ![Risk limits](docs/screenshots/risk-limits.png) |
 
+## Tech stack
+
+Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway, React 19 with
+TypeScript and Vite, JUnit 5 with Testcontainers, Vitest, Docker Compose, GitHub Actions.
+
+## Running locally
+
+### With Docker (easiest)
+
+Needs Docker Desktop. This builds and starts the database, backend and frontend:
+
+```powershell
+docker compose up --build
 ```
-RECEIVED ──> VALIDATED ──> ACCEPTED ──> SETTLED
-    │            │             │
-    └> REJECTED <┘             └──> CANCELLED
+
+Then open http://localhost:3000. The first build takes a few minutes. Stop it with `Ctrl+C`, and
+use `docker compose down -v` if you want to start over with fresh demo data.
+
+### Running the backend and frontend yourself
+
+Needs JDK 21, Node 22+ and Docker Desktop (for the database).
+
+**Windows (PowerShell)**: run one line at a time from the project folder (Windows PowerShell
+doesn't support `&&`).
+
+```powershell
+docker compose up -d postgres
+cd backend
+.\mvnw.cmd spring-boot:run
 ```
 
-A rejected trade is still stored (and the API returns 201), because the trade was recorded and
-rejecting it is a normal outcome. A request that's malformed or refers to an account or symbol
-that doesn't exist is a 400 and nothing is stored.
+Then, in a second PowerShell window, from the project folder:
 
-| A rejected trade | An accepted one, waiting to settle |
-|---|---|
-| ![Rejected trade](docs/screenshots/trade-rejected.png) | ![Accepted trade](docs/screenshots/trade-accepted.png) |
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+```
 
-## Roles
+(`npm.cmd` works even when PowerShell's execution policy blocks `npm.ps1`. Plain `npm` is fine if
+your policy allows it.)
 
-| Role         | Can                                             | Sees            |
-|--------------|-------------------------------------------------|-----------------|
-| Trader       | Submit trades                                   | Their own trades |
-| Operations   | Cancel accepted trades, run settlement          | All trades      |
-| Risk manager | Set and change risk limits, read the audit log  | All trades      |
-
-The UI only shows each role its own pages, but every rule is enforced by the backend.
-The rules are all in `SecurityConfig`.
-
-## Stack
-
-- **Backend**: Java 21, Spring Boot 4 (Web MVC, Data JPA, Security, Validation), Flyway, PostgreSQL 17
-- **Frontend**: React 19, TypeScript, React Router, Vite. Plain CSS with no component library.
-- **Tests**: JUnit 5 with Testcontainers (real Postgres), Vitest and Testing Library
-- **Tooling**: Maven wrapper, Docker Compose for the local database, GitHub Actions
-
-## Running it locally
-
-You need JDK 21, Node 22+ and Docker.
+**macOS / Linux**:
 
 ```bash
-docker compose up -d                 # Postgres on localhost:5432
-
-cd backend
-./mvnw spring-boot:run               # API on localhost:8080
-
-cd frontend
-npm install
-npm run dev                          # UI on http://localhost:5173
+docker compose up -d postgres
+cd backend && ./mvnw spring-boot:run
+cd frontend && npm install && npm run dev    # in a second terminal
 ```
 
-The first start loads a few days of sample trades, so there's something to look at.
+Open http://localhost:5173. Either way, the database starts with a few days of sample trades.
 
 ### Demo users
 
-All use the password `demo-pass`.
+These are **local demo credentials** created by a database migration. All use the password `demo-pass`.
 
-| User      | Role         |
-|-----------|--------------|
-| `trader1` | Trader       |
-| `trader2` | Trader (to check traders can't see each other's trades) |
-| `ops1`    | Operations   |
-| `risk1`   | Risk manager |
+| User      | Role         | Entitled accounts            |
+|-----------|--------------|------------------------------|
+| `trader1` | Trader       | ACC-1001, ACC-1002, ACC-1004 |
+| `trader2` | Trader       | ACC-1002, ACC-1003, ACC-1004 |
+| `ops1`    | Operations   | (doesn't book trades)        |
+| `risk1`   | Risk manager | (doesn't book trades)        |
 
-Things worth trying:
+Some things to try: as `trader1`, book 5,000 AAPL on ACC-1002 to see a risk rejection; as `ops1`,
+run settlement; as `risk1`, change a limit and look at the audit log.
 
-1. As `trader1`, book a trade that goes over a limit (e.g. 5,000 AAPL on ACC-1002) to see the rejection, then use "Amend and resubmit".
-2. As `ops1`, run settlement: the sample trades from the last business day are due today (on a weekday) and settle.
-3. As `risk1`, change a limit and check the audit log.
+## Testing
 
-## Tests
+Windows PowerShell, from the project folder:
 
-```bash
-cd backend && ./mvnw test            # needs Docker running (Testcontainers)
-cd frontend && npm test
+```powershell
+cd backend
+.\mvnw.cmd test
 ```
 
-The backend tests run against a real Postgres in a container, because several of them are
-about row locks and unique constraints, which an in-memory database wouldn't behave the same
-way for. A test clock replaces the real one, so "today" is whatever a test says it is.
+```powershell
+cd frontend
+npm.cmd test
+npm.cmd run lint
+npm.cmd run typecheck
+```
 
-## Some decisions worth explaining
+On macOS/Linux use `./mvnw test` and `npm test`. The backend tests start a real Postgres in Docker
+(Testcontainers), so Docker needs to be running. GitHub Actions runs both suites, the frontend
+lint/type-check/build, and the Docker image builds on every push.
 
-**Locking for the daily limit.** Two trades for the same account arriving together could both
+## Interesting engineering decisions
+
+**Concurrent daily limit checks.** Two trades for the same account arriving together could both
 read the same "used today" total and both pass. The risk check locks the account's limit row
-(`SELECT ... FOR UPDATE`) so checks for one account run one at a time. A test fires 8 trades at
-once against a limit that fits 4. Without the lock all 8 got accepted.
+(`SELECT ... FOR UPDATE`), so checks for one account run one at a time. A test fires 8 trades at
+once against a limit that only fits 4; without the lock, all 8 were accepted.
 
-**Duplicate submissions.** The trade form generates a `clientTradeId` once per trade, not per
-click. Submitting the same one again returns the original trade. If two identical requests
-race past the "does it exist?" lookup, a unique constraint stops the second insert and the
-service returns the trade the first one created.
+**Duplicate requests.** The trade form generates a `clientTradeId` once per trade, not per click.
+Sending the same one again returns the original trade. If two identical requests race past the
+"does it exist?" lookup, a unique constraint stops the second insert and the first trade is returned.
 
-**Settlement can run twice.** The job settles each trade in its own transaction and re-checks
-the status inside it, and `@Version` on the trade catches a cancel and a settle racing each
-other. Running it again finds nothing to do. A test runs three settlement jobs at the same time
-and checks every trade settled exactly once.
+**Settlement can run twice.** Each trade settles in its own transaction, its status is re-checked
+inside it, and `@Version` on the trade catches a cancel and a settle racing each other. A test
+runs three settlement jobs at the same time and checks every trade settled exactly once.
 
-**Two risk managers editing at once.** A limit edit sends the version it loaded. If someone else
-saved first, the second person gets a 409 that says who changed it, instead of silently
-overwriting their change.
+**Entitlements are checked before anything else.** Including the duplicate lookup, so resubmitting
+an existing trade can't get around them. An account code that doesn't exist gets the same 403
+as one you aren't entitled to, so the API doesn't reveal which accounts exist.
 
-**Sessions instead of JWT.** There's one backend, so I used Spring Security's normal session login
-with an HttpOnly cookie rather than storing tokens in the browser. CSRF protection stays on,
-using a cookie the frontend sends back as a header.
-
-**Time zones.** Trade dates are New York business dates, and the UI shows timestamps in New York
-time (labelled ET). Otherwise a trade booked at 9pm ET would look like next day's trade to
-someone in Europe.
+**Sessions instead of JWT.** There's one backend, so login uses Spring Security's normal server-side
+session with an HttpOnly cookie rather than a token stored in the browser. Because the session is
+a cookie, CSRF protection stays on.
 
 More detail is in [docs/design-notes.md](docs/design-notes.md).
 
-## What's not done
+## Not done yet
 
-- Accounts aren't assigned to traders, so any trader can book on any account.
-- Market holidays aren't modeled, only weekends.
-- No user management or login rate limiting; the demo users come from a migration.
-- Validation and risk checks run inside the submit request. If they had to call slower external
-  systems, I'd move them to a background worker with retries.
-- Not deployed anywhere yet.
-
-## Project layout
-
-```
-backend/src/main/java/com/tradeplatform/
-  trade/        trade entity, lifecycle, submission, queries
-  risk/         risk checks, limit editing, audit records
-  settlement/   scheduled settlement job
-  security/     login, roles, SecurityConfig
-  account/, instrument/, common/
-backend/src/main/resources/db/
-  migration/    Flyway schema migrations
-  demo/         sample data for local runs
-frontend/src/
-  pages/        one file per screen
-  components/   layout and shared UI pieces
-  api/          fetch wrapper and types
-```
-
-<details>
-<summary>More screenshots</summary>
-
-![New trade](docs/screenshots/new-trade.png)
-![Risk limits](docs/screenshots/risk-limits.png)
-![Audit log](docs/screenshots/audit-log.png)
-![Settlement](docs/screenshots/settlement.png)
-
-</details>
+- No market holiday calendar (weekends are skipped, holidays aren't).
+- No login rate limiting, user management or screen for editing entitlements; users and
+  entitlements come from migrations.
+- Not deployed anywhere.
