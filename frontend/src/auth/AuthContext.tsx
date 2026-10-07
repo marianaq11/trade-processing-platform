@@ -1,12 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { ApiError, apiGet, apiPost, postLogin, setUnauthorizedHandler } from '../api/client.ts'
-
-export type Role = 'TRADER' | 'OPERATIONS' | 'RISK_MANAGER'
-
-export interface CurrentUser {
-  username: string
-  role: Role
-}
+import type { CurrentUser } from '../api/types.ts'
 
 interface AuthState {
   user: CurrentUser | null
@@ -14,11 +9,12 @@ interface AuthState {
   logout: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthState | null>(null)
+export const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [checked, setChecked] = useState(false)
+  const navigate = useNavigate()
 
   // Calling /me on startup also gets us the CSRF cookie, which the login request needs.
   useEffect(() => {
@@ -37,10 +33,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true
   }, [])
 
+  // Signing out also goes back to "/", so whoever signs in next lands on their own home page
+  // rather than a page that belonged to the previous user's role. (A session that expires
+  // keeps its URL, so signing back in returns to the same page.)
   const logout = useCallback(async () => {
     await apiPost('/api/auth/logout').catch(() => {})
     setUser(null)
-  }, [])
+    navigate('/', { replace: true })
+  }, [navigate])
 
   if (!checked) return null
 

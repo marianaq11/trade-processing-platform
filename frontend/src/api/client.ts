@@ -61,6 +61,10 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return (await request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) })).data
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return (await request<T>(path, { method: 'PUT', body: JSON.stringify(body) })).data
+}
+
 // Login is a regular form post because Spring Security's form login reads request params.
 export async function postLogin(username: string, password: string): Promise<boolean> {
   // Logging out clears the CSRF cookie, and any response from the backend sets a new one.

@@ -1,8 +1,23 @@
 export type TradeStatus = 'RECEIVED' | 'VALIDATED' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'SETTLED'
 
-export const TRADE_STATUSES: TradeStatus[] = ['RECEIVED', 'VALIDATED', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'SETTLED']
-
 export type Side = 'BUY' | 'SELL'
+
+export type Role = 'TRADER' | 'OPERATIONS' | 'RISK_MANAGER'
+
+export type RejectionReason =
+  | 'ACCOUNT_SUSPENDED'
+  | 'INSTRUMENT_INACTIVE'
+  | 'NO_RISK_LIMITS'
+  | 'PRICE_OUT_OF_TOLERANCE'
+  | 'TRADE_NOTIONAL_LIMIT'
+  | 'DAILY_NOTIONAL_LIMIT'
+
+export type RiskLimitField = 'MAX_TRADE_NOTIONAL' | 'MAX_DAILY_NOTIONAL' | 'PRICE_TOLERANCE_PCT'
+
+export interface CurrentUser {
+  username: string
+  role: Role
+}
 
 export interface Account {
   code: string
@@ -21,7 +36,9 @@ export interface Trade {
   id: number
   clientTradeId: string
   accountCode: string
+  accountName: string
   symbol: string
+  instrumentName: string
   side: Side
   quantity: number
   price: number
@@ -29,7 +46,7 @@ export interface Trade {
   tradeDate: string
   settlementDate: string
   status: TradeStatus
-  rejectionReason: string | null
+  rejectionReason: RejectionReason | null
   rejectionDetail: string | null
   submittedBy: string
   createdAt: string
@@ -44,6 +61,8 @@ export interface TradeEvent {
   performedBy: string
   createdAt: string
 }
+
+export type StatusCounts = Record<TradeStatus, number>
 
 export interface Page<T> {
   content: T[]
@@ -60,4 +79,43 @@ export interface SubmitTradeRequest {
   side: Side
   quantity: number
   price: number
+}
+
+// Limit fields are null for an account that has no limits set up yet.
+export interface RiskLimit {
+  accountCode: string
+  accountName: string
+  accountStatus: 'ACTIVE' | 'SUSPENDED'
+  maxTradeNotional: number | null
+  maxDailyNotional: number | null
+  priceTolerancePct: number | null
+  usedToday: number
+  updatedAt: string | null
+  updatedBy: string | null
+  version: number | null
+}
+
+export interface RiskLimitChange {
+  id: number
+  accountCode: string
+  field: RiskLimitField
+  oldValue: number | null
+  newValue: number
+  reason: string
+  changedBy: string
+  changedAt: string
+}
+
+export interface SettlementStatus {
+  businessDate: string
+  dueNow: number
+  awaitingLater: number
+}
+
+export interface SettlementRun {
+  businessDate: string
+  due: number
+  settled: number
+  skipped: number
+  failed: number
 }

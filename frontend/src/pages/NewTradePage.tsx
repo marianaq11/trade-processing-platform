@@ -1,15 +1,31 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ApiError, errorMessage, request } from '../api/client.ts'
-import { useApi } from '../api/useApi.ts'
 import type { Account, Instrument, Side, SubmitTradeRequest, Trade } from '../api/types.ts'
-import StatusBadge from '../components/StatusBadge.tsx'
-import { formatMoney, formatPrice } from '../format.ts'
+import { useApi } from '../api/useApi.ts'
+import { Banner, ErrorBanner } from '../components/Feedback.tsx'
+import Field, { messageId } from '../components/Field.tsx'
+import PageHeader from '../components/PageHeader.tsx'
+import StatusBadge, { SideLabel } from '../components/StatusBadge.tsx'
+import {
+  formatMoney,
+  formatPrice,
+  formatQuantity,
+  formatTradeId,
+  nextBusinessDay,
+  parseNumber,
+  todayInNewYork,
+} from '../format.ts'
+import { rejectionLabels, statusLabels } from '../labels.ts'
 
-interface SubmitOutcome {
+const MAX_QUANTITY = 10_000_000
+
+interface Outcome {
   trade: Trade
   duplicate: boolean
 }
+
+type Errors = Partial<Record<'accountCode' | 'symbol' | 'quantity' | 'price', string>>
 
 export default function NewTradePage() {
   const accounts = useApi<Account[]>('/api/accounts')
@@ -18,49 +34,59 @@ export default function NewTradePage() {
   // Generated once per trade, not per click. If the request fails or times out and the user
   // hits Submit again, the backend sees the same ID and won't book the trade twice.
   const [clientTradeId, setClientTradeId] = useState(() => crypto.randomUUID())
+  const [side, setSide] = useState<Side>('BUY')
   const [accountCode, setAccountCode] = useState('')
   const [symbol, setSymbol] = useState('')
-  const [side, setSide] = useState<Side>('BUY')
-  const [quantity, setQuantity] = useState('')
-  const [price, setPrice] = useState('')
+  const [quantityText, setQuantityText] = useState('')
+  const [priceText, setPriceText] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [outcome, setOutcome] = useState<SubmitOutcome>()
+  const [fieldErrors, setFieldErrors] = useState<Errors>({})
+  const [outcome, setOutcome] = useState<Outcome>()
 
+  const account = accounts.data?.find((a) => a.code === accountCode)
   const instrument = instruments.data?.find((i) => i.symbol === symbol)
-  const estimatedNotional = Number(quantity) * Number(price)
+  const quantity = parseNumber(quantityText)
+  const price = parseNumber(priceText)
+  const notional = quantity && price ? quantity * price : undefined
+  const deviationPct =
+    instrument && price ? ((price - instrument.referencePrice) / instrument.referencePrice) * 100 : undefined
+  const today = todayInNewYork()
 
-  function edit(field: string, setValue: (value: string) => void, value: string) {
-    setValue(value)
-    setFieldErrors((errors) => {
-      const next = { ...errors }
-      delete next[field]
-      return next
-    })
+  function clearError(field: keyof Errors) {
+    setFieldErrors((errors) => ({ ...errors, [field]: undefined }))
   }
 
   function selectSymbol(value: string) {
     setSymbol(value)
+    clearError('symbol')
     const selected = instruments.data?.find((i) => i.symbol === value)
-    if (selected && !price) setPrice(String(selected.referencePrice))
+    if (selected && !priceText) setPriceText(formatPrice(selected.referencePrice))
+  }
+
+  function validate(): Errors {
+    const errors: Errors = {}
+    if (!accountCode) errors.accountCode = 'Choose an account'
+    if (!symbol) errors.symbol = 'Choose an instrument'
+    if (quantity === undefined) errors.quantity = 'Enter a quantity'
+    else if (!Number.isInteger(quantity) || quantity <= 0) errors.quantity = 'Must be a whole number of shares'
+    else if (quantity > MAX_QUANTITY) errors.quantity = `Can't be more than ${formatQuantity(MAX_QUANTITY)}`
+    if (price === undefined) errors.price = 'Enter a price'
+    else if (price <= 0) errors.price = 'Must be greater than 0'
+    else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
+    return errors
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setSubmitting(true)
     setError(undefined)
-    setFieldErrors({})
+    const errors = validate()
+    setFieldErrors(errors)
+    if (Object.values(errors).some(Boolean)) return
 
-    const body: SubmitTradeRequest = {
-      clientTradeId,
-      accountCode,
-      symbol,
-      side,
-      quantity: Number(quantity),
-      price: Number(price),
-    }
+    const body: SubmitTradeRequest = { clientTradeId, accountCode, symbol, side, quantity: quantity!, price: price! }
+    setSubmitting(true)
     try {
       const { data, status } = await request<Trade>('/api/trades', { method: 'POST', body: JSON.stringify(body) })
       setOutcome({ trade: data, duplicate: status === 200 })
@@ -72,155 +98,257 @@ export default function NewTradePage() {
     }
   }
 
-  function startNewTrade() {
+  // A new clientTradeId either way: this is a new trade, not a retry of the last one.
+  function startNewTrade(keepDetails: boolean) {
     setClientTradeId(crypto.randomUUID())
-    setSymbol('')
-    setQuantity('')
-    setPrice('')
+    if (!keepDetails) {
+      setSymbol('')
+      setQuantityText('')
+      setPriceText('')
+    }
     setOutcome(undefined)
+    setError(undefined)
+    setFieldErrors({})
   }
 
+  const header = (
+    <PageHeader
+      title="New trade"
+      subtitle="US equities, settled T+1. Trades are validated and risk-checked as soon as you submit."
+    />
+  )
+
   if (outcome) {
-    return <TradeOutcome outcome={outcome} onNewTrade={startNewTrade} />
+    return (
+      <>
+        {header}
+        <TradeOutcome outcome={outcome} onNewTrade={() => startNewTrade(false)} onAmend={() => startNewTrade(true)} />
+      </>
+    )
   }
 
   return (
     <>
-      <div className="page-header">
-        <h1>New trade</h1>
-      </div>
+      {header}
+      <form className="ticket" onSubmit={handleSubmit} noValidate>
+        <section className="panel ticket-form" aria-label="Trade details">
+          {error && <ErrorBanner message={error} />}
 
-      <form className="trade-form" onSubmit={handleSubmit} noValidate>
-        {error && <p className="error-banner">{error}</p>}
-
-        <div className="field">
-          <label htmlFor="account">Account</label>
-          <select
-            id="account"
-            value={accountCode}
-            onChange={(e) => edit('accountCode', setAccountCode, e.target.value)}
-          >
-            <option value="">Select account</option>
-            {accounts.data?.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.code} – {a.name}
-                {a.status === 'SUSPENDED' ? ' (suspended)' : ''}
-              </option>
-            ))}
-          </select>
-          <FieldError message={fieldErrors.accountCode} />
-        </div>
-
-        <div className="field">
-          <label htmlFor="symbol">Symbol</label>
-          <select id="symbol" value={symbol} onChange={(e) => edit('symbol', selectSymbol, e.target.value)}>
-            <option value="">Select symbol</option>
-            {instruments.data?.map((i) => (
-              <option key={i.symbol} value={i.symbol}>
-                {i.symbol} – {i.name}
-                {i.active ? '' : ' (inactive)'}
-              </option>
-            ))}
-          </select>
-          {instrument && <span className="hint">Reference price {formatPrice(instrument.referencePrice)}</span>}
-          <FieldError message={fieldErrors.symbol} />
-        </div>
-
-        <div className="field">
-          <span className="label">Side</span>
-          <div className="side-toggle" role="radiogroup" aria-label="Side">
+          <fieldset className="side-toggle">
+            <legend>Side</legend>
             {(['BUY', 'SELL'] as const).map((s) => (
-              <label key={s} className={side === s ? `selected side-${s.toLowerCase()}` : ''}>
+              <label key={s} className={side === s ? `side-option is-selected side-${s.toLowerCase()}` : 'side-option'}>
                 <input type="radio" name="side" value={s} checked={side === s} onChange={() => setSide(s)} />
-                {s}
+                {s === 'BUY' ? 'Buy' : 'Sell'}
               </label>
             ))}
-          </div>
-        </div>
+          </fieldset>
 
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="quantity">Quantity</label>
-            <input
-              id="quantity"
-              type="number"
-              min="1"
-              step="1"
-              value={quantity}
-              onChange={(e) => edit('quantity', setQuantity, e.target.value)}
-            />
-            <FieldError message={fieldErrors.quantity} />
-          </div>
-          <div className="field">
-            <label htmlFor="price">Price</label>
-            <input
+          <Field
+            id="account"
+            label="Account"
+            error={fieldErrors.accountCode}
+            hint={account?.status === 'SUSPENDED' ? 'This account is suspended.' : undefined}
+          >
+            <select
+              id="account"
+              value={accountCode}
+              onChange={(e) => {
+                setAccountCode(e.target.value)
+                clearError('accountCode')
+              }}
+              aria-invalid={!!fieldErrors.accountCode}
+              aria-describedby={messageId('account')}
+            >
+              <option value="">Select an account</option>
+              {accounts.data?.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} · {a.name}
+                  {a.status === 'SUSPENDED' ? ' (suspended)' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            id="symbol"
+            label="Instrument"
+            error={fieldErrors.symbol}
+            hint={instrument && `Reference price ${formatPrice(instrument.referencePrice)}`}
+          >
+            <select
+              id="symbol"
+              value={symbol}
+              onChange={(e) => selectSymbol(e.target.value)}
+              aria-invalid={!!fieldErrors.symbol}
+              aria-describedby={messageId('symbol')}
+            >
+              <option value="">Select an instrument</option>
+              {instruments.data?.map((i) => (
+                <option key={i.symbol} value={i.symbol}>
+                  {i.symbol} · {i.name}
+                  {i.active ? '' : ' (not tradable)'}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <div className="field-row">
+            <Field id="quantity" label="Quantity (shares)" error={fieldErrors.quantity}>
+              <input
+                id="quantity"
+                className="input-number"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="0"
+                value={quantityText}
+                onChange={(e) => {
+                  setQuantityText(e.target.value)
+                  clearError('quantity')
+                }}
+                onBlur={() => quantity !== undefined && Number.isInteger(quantity) && setQuantityText(formatQuantity(quantity))}
+                aria-invalid={!!fieldErrors.quantity}
+                aria-describedby={messageId('quantity')}
+              />
+            </Field>
+            <Field
               id="price"
-              type="number"
-              min="0"
-              step="0.0001"
-              value={price}
-              onChange={(e) => edit('price', setPrice, e.target.value)}
-            />
-            <FieldError message={fieldErrors.price} />
+              label="Price (USD)"
+              error={fieldErrors.price}
+              hint={deviationPct !== undefined && <PriceDeviation pct={deviationPct} />}
+            >
+              <input
+                id="price"
+                className="input-number"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                value={priceText}
+                onChange={(e) => {
+                  setPriceText(e.target.value)
+                  clearError('price')
+                }}
+                aria-invalid={!!fieldErrors.price}
+                aria-describedby={messageId('price')}
+              />
+            </Field>
           </div>
-        </div>
+        </section>
 
-        <p className="hint">
-          Notional: {estimatedNotional > 0 ? formatMoney(estimatedNotional) : '–'}
-        </p>
+        <aside className="panel ticket-summary" aria-label="Summary">
+          <h2 className="panel-title">Summary</h2>
+          <p className="summary-headline">
+            {symbol && quantity ? (
+              <>
+                <SideLabel side={side} /> {formatQuantity(quantity)} {symbol}
+                {price ? ` @ ${formatPrice(price)}` : ''}
+              </>
+            ) : (
+              <span className="muted">Fill in the trade details</span>
+            )}
+          </p>
+          <dl className="summary-list">
+            <div>
+              <dt>Notional (USD)</dt>
+              <dd className="summary-notional">{notional ? formatMoney(notional) : '—'}</dd>
+            </div>
+            <div>
+              <dt>Account</dt>
+              <dd>{account ? `${account.code} · ${account.name}` : '—'}</dd>
+            </div>
+            <div>
+              <dt>Trade date</dt>
+              <dd>{today}</dd>
+            </div>
+            <div>
+              <dt>Settlement</dt>
+              <dd>{nextBusinessDay(today)} (T+1)</dd>
+            </div>
+          </dl>
 
-        <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Submitting...' : 'Submit trade'}
+          {account?.status === 'SUSPENDED' && (
+            <Banner tone="warning">{account.code} is suspended, so this trade will be rejected.</Banner>
+          )}
+          {instrument && !instrument.active && (
+            <Banner tone="warning">{instrument.symbol} is not tradable, so this trade will be rejected.</Banner>
+          )}
+
+          <button
+            type="submit"
+            className={`btn btn-block btn-submit btn-submit-${side.toLowerCase()}`}
+            disabled={submitting}
+          >
+            {submitting ? 'Submitting...' : `Submit ${side === 'BUY' ? 'buy' : 'sell'} trade`}
           </button>
-          <Link to="/trades" className="btn">
-            Cancel
-          </Link>
-        </div>
-
-        <p className="hint">Client trade ID {clientTradeId}</p>
+          <p className="client-id-note">
+            Client trade ID <code>{clientTradeId.slice(0, 8)}</code>. It's sent with the trade, so retrying after
+            an error can't book it twice.
+          </p>
+        </aside>
       </form>
     </>
   )
 }
 
-function FieldError({ message }: { message?: string }) {
-  return message ? <span className="field-error">{message}</span> : null
+function PriceDeviation({ pct }: { pct: number }) {
+  const rounded = Math.abs(pct) < 0.005 ? 0 : pct
+  const text = rounded === 0 ? 'At the reference price' : `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toFixed(2)}% vs reference`
+  // Tolerance is set per account (5-10% for the demo accounts), so this is only a heads-up.
+  return <span className={Math.abs(pct) > 5 ? 'deviation is-far' : 'deviation'}>{text}</span>
 }
 
-function TradeOutcome({ outcome, onNewTrade }: { outcome: SubmitOutcome; onNewTrade: () => void }) {
+interface OutcomeProps {
+  outcome: Outcome
+  onNewTrade: () => void
+  onAmend: () => void
+}
+
+function TradeOutcome({ outcome, onNewTrade, onAmend }: OutcomeProps) {
   const { trade, duplicate } = outcome
+  const rejected = trade.status === 'REJECTED'
+  const title = rejected ? 'Trade rejected' : `Trade ${statusLabels[trade.status].toLowerCase()}`
+
   return (
-    <>
-      <div className="page-header">
-        <h1>
-          Trade {trade.id} <StatusBadge status={trade.status} />
-        </h1>
+    <section className={`panel outcome ${rejected ? 'outcome-rejected' : 'outcome-ok'}`} aria-live="polite">
+      <div className="outcome-header">
+        <h2>{title}</h2>
+        <StatusBadge status={trade.status} />
+        <Link className="trade-id" to={`/trades/${trade.id}`}>
+          {formatTradeId(trade.id)}
+        </Link>
       </div>
 
       {duplicate && (
-        <p className="notice">This trade was already submitted, so the original is shown instead of booking it again.</p>
+        <Banner tone="info">
+          This trade had already been submitted, so nothing new was booked. Showing the original.
+        </Banner>
       )}
-      {trade.status === 'REJECTED' && (
-        <p className="notice notice-rejected">
-          <strong>{trade.rejectionReason}</strong>: {trade.rejectionDetail}
+
+      {rejected && trade.rejectionReason && (
+        <p className="outcome-reason">
+          <strong>{rejectionLabels[trade.rejectionReason]}.</strong> {trade.rejectionDetail}
         </p>
       )}
 
-      <p>
-        {trade.side} {trade.quantity} {trade.symbol} @ {formatPrice(trade.price)} for {trade.accountCode}, notional{' '}
-        {formatMoney(trade.notional)}
-        {trade.status === 'ACCEPTED' && <>, settles {trade.settlementDate}</>}.
+      <p className="outcome-summary">
+        <SideLabel side={trade.side} /> {formatQuantity(trade.quantity)} {trade.symbol} @ {formatPrice(trade.price)} for{' '}
+        {trade.accountCode}, notional {formatMoney(trade.notional)} USD.
+        {trade.status === 'ACCEPTED' && <> Settles {trade.settlementDate}.</>}
       </p>
 
       <div className="form-actions">
-        <button className="btn btn-primary" onClick={onNewTrade}>
-          Enter another trade
+        {rejected && (
+          <button className="btn btn-primary" onClick={onAmend}>
+            Amend and resubmit
+          </button>
+        )}
+        <button className={rejected ? 'btn' : 'btn btn-primary'} onClick={onNewTrade}>
+          New trade
         </button>
         <Link className="btn" to={`/trades/${trade.id}`}>
           View trade
         </Link>
       </div>
-    </>
+    </section>
   )
 }
