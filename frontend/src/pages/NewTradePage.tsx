@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { ApiError, errorMessage, request } from '../api/client.ts'
 import type { Account, Instrument, Side, SubmitTradeRequest, Trade } from '../api/types.ts'
 import { useApi } from '../api/useApi.ts'
-import { Banner, ErrorBanner } from '../components/Feedback.tsx'
+import { Banner, EmptyState, ErrorBanner } from '../components/Feedback.tsx'
 import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import StatusBadge, { SideLabel } from '../components/StatusBadge.tsx'
@@ -129,6 +129,17 @@ export default function NewTradePage() {
     )
   }
 
+  if (accounts.data?.length === 0) {
+    return (
+      <>
+        {header}
+        <EmptyState title="You aren't entitled to trade on any accounts yet.">
+          <p className="muted">Entitlements are set up per trader. Ask operations to add the accounts you cover.</p>
+        </EmptyState>
+      </>
+    )
+  }
+
   return (
     <>
       {header}
@@ -150,7 +161,7 @@ export default function NewTradePage() {
             id="account"
             label="Account"
             error={fieldErrors.accountCode}
-            hint={account?.status === 'SUSPENDED' ? 'This account is suspended.' : undefined}
+            hint={account?.status === 'SUSPENDED' ? 'This account is suspended.' : 'Only accounts you are entitled to trade on.'}
           >
             <select
               id="account"

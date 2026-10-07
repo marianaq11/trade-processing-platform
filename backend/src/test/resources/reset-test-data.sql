@@ -1,6 +1,15 @@
--- Runs before every integration test. Puts trades and risk limits back to what the seed
--- migrations created, since all test classes share one database.
+-- Runs before every integration test. Puts trades, risk limits and entitlements back to what
+-- the seed migrations created, since all test classes share one database.
 TRUNCATE trade_event, trade, risk_limit_change;
+
+DELETE FROM account_entitlement;
+
+INSERT INTO account_entitlement (user_id, account_id)
+SELECT u.id, a.id
+FROM (VALUES ('trader1', 'ACC-1001'), ('trader1', 'ACC-1002'), ('trader1', 'ACC-1004'),
+             ('trader2', 'ACC-1002'), ('trader2', 'ACC-1003'), ('trader2', 'ACC-1004')) AS e (username, code)
+JOIN app_user u ON u.username = e.username
+JOIN account a ON a.code = e.code;
 
 DELETE FROM risk_limit;
 

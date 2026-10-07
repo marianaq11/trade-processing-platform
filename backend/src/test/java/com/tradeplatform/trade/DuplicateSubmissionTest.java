@@ -80,9 +80,9 @@ class DuplicateSubmissionTest extends IntegrationTest {
 
     @Test
     void duplicateOfARejectedTradeReturnsTheRejection() throws Exception {
-        submit("order-1", "ACC-1003", 100).andExpect(jsonPath("$.status").value("REJECTED"));
+        submit("order-1", "ACC-1004", 100).andExpect(jsonPath("$.status").value("REJECTED"));
 
-        submit("order-1", "ACC-1003", 100)
+        submit("order-1", "ACC-1004", 100)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
     }
@@ -90,7 +90,7 @@ class DuplicateSubmissionTest extends IntegrationTest {
     @Test
     void twoPeopleCancellingAtOnceOnlyCancelsOnce() throws Exception {
         long id = tradeService.submit(new SubmitTradeRequest("to-cancel", "ACC-1001", "AAPL", Side.BUY, 100L,
-                new BigDecimal("230.00")), "alice").trade().id();
+                new BigDecimal("230.00")), "trader1").trade().id();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -137,7 +137,7 @@ class DuplicateSubmissionTest extends IntegrationTest {
         for (int i = 0; i < threads; i++) {
             futures.add(executor.submit(() -> {
                 start.await();
-                return tradeService.submit(request, "alice");
+                return tradeService.submit(request, "trader1");
             }));
         }
         start.countDown();

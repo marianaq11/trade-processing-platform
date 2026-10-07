@@ -149,6 +149,18 @@ describe('new trade form', () => {
     expect(screen.getByLabelText('Quantity (shares)')).toHaveAttribute('aria-invalid', 'true')
   })
 
+  it("tells a trader with no entitled accounts instead of showing an empty form", async () => {
+    mockFetch((url) => {
+      if (url === '/api/accounts') return json([])
+      if (url === '/api/instruments') return json(instruments)
+      return unexpected(url)
+    })
+    renderAs(userWithRole('TRADER'), <NewTradePage />, '/trades/new')
+
+    expect(await screen.findByText("You aren't entitled to trade on any accounts yet.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument()
+  })
+
   it('warns before submitting for a suspended account', async () => {
     const { user } = setUp(() => json(trade(), 201))
     await fillIn(user, 'ACC-1004')

@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.tradeplatform.account.Account;
 import com.tradeplatform.account.AccountRepository;
 import com.tradeplatform.common.BadRequestException;
+import com.tradeplatform.common.ForbiddenException;
 import com.tradeplatform.common.NotFoundException;
 import com.tradeplatform.common.PageResponse;
 import com.tradeplatform.instrument.Instrument;
@@ -67,15 +68,20 @@ public class TradeService {
     }
 
     private SubmitResult submitInTransaction(SubmitTradeRequest request, String submittedBy) {
+        // Checked first, before the duplicate lookup, so resubmitting an existing trade can't get
+        // around it. An account code that doesn't exist gets the same answer as one the trader
+        // isn't entitled to, so the API doesn't reveal which accounts exist.
+        Account account = accountRepository.findEntitledAccount(submittedBy, request.accountCode())
+                .orElseThrow(() -> new ForbiddenException(
+                        "You aren't entitled to trade on account " + request.accountCode()));
+
         Optional<SubmitResult> duplicate = findDuplicate(request, submittedBy);
         if (duplicate.isPresent()) {
             return duplicate.get();
         }
 
-        // Unknown references are a bad request rather than a rejected trade: there's no
-        // real account or instrument to attach the trade to.
-        Account account = accountRepository.findByCode(request.accountCode())
-                .orElseThrow(() -> new BadRequestException("Unknown account " + request.accountCode()));
+        // An unknown symbol is a bad request rather than a rejected trade: there's no real
+        // instrument to attach the trade to.
         Instrument instrument = instrumentRepository.findBySymbol(request.symbol().toUpperCase())
                 .orElseThrow(() -> new BadRequestException("Unknown symbol " + request.symbol()));
 

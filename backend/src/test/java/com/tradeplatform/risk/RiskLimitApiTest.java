@@ -35,6 +35,8 @@ import com.tradeplatform.common.ConflictException;
 class RiskLimitApiTest extends IntegrationTest {
 
     private static final RequestPostProcessor TRADER = user("trader1").roles("TRADER");
+    // the only demo trader entitled to ACC-1003
+    private static final RequestPostProcessor TRADER_2 = user("trader2").roles("TRADER");
 
     @Autowired
     private RiskLimitService riskLimitService;
@@ -52,11 +54,16 @@ class RiskLimitApiTest extends IntegrationTest {
     }
 
     private ResultActions submitTrade(String account, long quantity, String price) throws Exception {
+        return submitTradeAs(TRADER, account, quantity, price);
+    }
+
+    private ResultActions submitTradeAs(RequestPostProcessor trader, String account, long quantity, String price)
+            throws Exception {
         String body = """
                 {"clientTradeId": "%s", "accountCode": "%s", "symbol": "AAPL",
                  "side": "BUY", "quantity": %d, "price": %s}
                 """.formatted(UUID.randomUUID(), account, quantity, price);
-        return mockMvc.perform(post("/api/trades").with(TRADER).with(csrf())
+        return mockMvc.perform(post("/api/trades").with(trader).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
     }
@@ -142,7 +149,7 @@ class RiskLimitApiTest extends IntegrationTest {
 
     @Test
     void settingUpLimitsForANewAccountLetsItTrade() throws Exception {
-        submitTrade("ACC-1003", 10, "230.00")
+        submitTradeAs(TRADER_2, "ACC-1003", 10, "230.00")
                 .andExpect(jsonPath("$.rejectionReason").value("NO_RISK_LIMITS"));
 
         updateLimits("ACC-1003", "100000", "400000", "5", "Account onboarded", null)
@@ -153,7 +160,7 @@ class RiskLimitApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(3))
                 .andExpect(jsonPath("$.content[0].oldValue").value(nullValue()));
 
-        submitTrade("ACC-1003", 10, "230.00")
+        submitTradeAs(TRADER_2, "ACC-1003", 10, "230.00")
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
 

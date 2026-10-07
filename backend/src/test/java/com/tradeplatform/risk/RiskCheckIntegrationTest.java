@@ -2,6 +2,7 @@ package com.tradeplatform.risk;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -61,7 +62,13 @@ class RiskCheckIntegrationTest extends IntegrationTest {
 
     @Test
     void accountWithoutLimitsIsRejected() throws Exception {
-        submit("ACC-1003", 1, "230.00")
+        // ACC-1003 belongs to trader2
+        mockMvc.perform(post("/api/trades").with(user("trader2").roles("TRADER")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"clientTradeId": "no-limits", "accountCode": "ACC-1003", "symbol": "AAPL",
+                                 "side": "BUY", "quantity": 1, "price": 230.00}
+                                """))
                 .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.rejectionReason").value("NO_RISK_LIMITS"));
     }
@@ -107,7 +114,7 @@ class RiskCheckIntegrationTest extends IntegrationTest {
                 start.await();
                 SubmitTradeRequest request = new SubmitTradeRequest(UUID.randomUUID().toString(),
                         "ACC-1002", "AAPL", Side.BUY, 1000L, new BigDecimal("230.00"));
-                return tradeService.submit(request, "load-test").trade();
+                return tradeService.submit(request, "trader1").trade();
             }));
         }
         start.countDown();

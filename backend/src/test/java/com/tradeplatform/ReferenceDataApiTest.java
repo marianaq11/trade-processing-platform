@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithMockUser;
 
-@WithMockUser
+@WithMockUser(roles = "OPERATIONS")
 class ReferenceDataApiTest extends IntegrationTest {
 
     @Test

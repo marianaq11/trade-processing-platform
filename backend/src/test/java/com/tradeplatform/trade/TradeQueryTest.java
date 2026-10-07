@@ -115,8 +115,8 @@ class TradeQueryTest extends IntegrationTest {
     @Test
     void tradersOnlyCountTheirOwnTrades() throws Exception {
         submit(TRADER_1, "ACC-1001", "BUY", 100, "230");
-        submit(TRADER_2, "ACC-1001", "BUY", 100, "230");
-        submit(TRADER_2, "ACC-1001", "BUY", 100, "230");
+        submit(TRADER_2, "ACC-1002", "BUY", 100, "230");
+        submit(TRADER_2, "ACC-1002", "BUY", 100, "230");
 
         mockMvc.perform(get("/api/trades/status-counts").with(TRADER_1))
                 .andExpect(jsonPath("$.ACCEPTED").value(1));
