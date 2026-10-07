@@ -21,7 +21,7 @@ public class RiskCheckService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     // Cancelled trades never settle, so they don't use up the daily limit.
-    private static final List<TradeStatus> COUNTS_TOWARD_DAILY_LIMIT = List.of(TradeStatus.ACCEPTED, TradeStatus.SETTLED);
+    static final List<TradeStatus> COUNTS_TOWARD_DAILY_LIMIT = List.of(TradeStatus.ACCEPTED, TradeStatus.SETTLED);
 
     private final RiskLimitRepository riskLimitRepository;
     private final TradeRepository tradeRepository;

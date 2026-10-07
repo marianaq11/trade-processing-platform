@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.Version;
 
 @Entity
 public class RiskLimit {
@@ -32,15 +33,33 @@ public class RiskLimit {
 
     private String updatedBy;
 
+    @Version
+    private long version;
+
     protected RiskLimit() {
     }
 
     public RiskLimit(Account account, BigDecimal maxTradeNotional, BigDecimal maxDailyNotional,
-                     BigDecimal priceTolerancePct) {
+                     BigDecimal priceTolerancePct, String updatedBy, Instant updatedAt) {
         this.account = account;
+        update(maxTradeNotional, maxDailyNotional, priceTolerancePct, updatedBy, updatedAt);
+    }
+
+    void update(BigDecimal maxTradeNotional, BigDecimal maxDailyNotional, BigDecimal priceTolerancePct,
+                String updatedBy, Instant updatedAt) {
         this.maxTradeNotional = maxTradeNotional;
         this.maxDailyNotional = maxDailyNotional;
         this.priceTolerancePct = priceTolerancePct;
+        this.updatedBy = updatedBy;
+        this.updatedAt = updatedAt;
+    }
+
+    BigDecimal get(RiskLimitField field) {
+        return switch (field) {
+            case MAX_TRADE_NOTIONAL -> maxTradeNotional;
+            case MAX_DAILY_NOTIONAL -> maxDailyNotional;
+            case PRICE_TOLERANCE_PCT -> priceTolerancePct;
+        };
     }
 
     public Long getId() {
@@ -69,5 +88,9 @@ public class RiskLimit {
 
     public String getUpdatedBy() {
         return updatedBy;
+    }
+
+    public long getVersion() {
+        return version;
     }
 }

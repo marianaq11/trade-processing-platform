@@ -3,6 +3,7 @@ package com.tradeplatform.risk;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -24,7 +25,7 @@ class RiskRulesTest {
 
     // max 100k per trade, 300k per day, price within 5% of reference
     private final RiskLimit limit = new RiskLimit(account, new BigDecimal("100000.00"),
-            new BigDecimal("300000.00"), new BigDecimal("5.00"));
+            new BigDecimal("300000.00"), new BigDecimal("5.00"), "test", Instant.EPOCH);
 
     private Trade trade(long quantity, String price) {
         return new Trade("t", account, instrument, Side.BUY, quantity, new BigDecimal(price),

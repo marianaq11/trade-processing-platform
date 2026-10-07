@@ -2,21 +2,29 @@ package com.tradeplatform;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
+import java.time.LocalDate;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
+@Sql("/reset-test-data.sql")
 public abstract class IntegrationTest {
 
+    // A Monday, so T+1 is the next day. Tests that care about other days set the clock themselves.
+    protected static final LocalDate MONDAY = LocalDate.of(2026, 10, 5);
+
     protected static final RequestPostProcessor OPS_USER = user("ops1").roles("OPERATIONS");
+    protected static final RequestPostProcessor RISK_USER = user("risk1").roles("RISK_MANAGER");
 
     @Autowired
     protected MockMvc mockMvc;
@@ -24,10 +32,11 @@ public abstract class IntegrationTest {
     @Autowired
     protected JdbcTemplate jdbcTemplate;
 
-    // All test classes share one database, so clear out anything a previous test created.
-    // Reference data from the seed migrations is left alone.
+    @Autowired
+    protected MutableClock clock;
+
     @BeforeEach
-    void clearTrades() {
-        jdbcTemplate.execute("TRUNCATE trade_event, trade");
+    void resetClock() {
+        clock.setDate(MONDAY);
     }
 }

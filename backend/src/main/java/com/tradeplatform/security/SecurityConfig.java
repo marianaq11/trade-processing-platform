@@ -28,6 +28,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/trades").hasRole("TRADER")
                         .requestMatchers(HttpMethod.POST, "/api/trades/*/cancel").hasRole("OPERATIONS")
+                        .requestMatchers("/api/risk-limits/**", "/api/risk-limit-changes/**").hasRole("RISK_MANAGER")
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login")

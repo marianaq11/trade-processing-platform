@@ -22,7 +22,6 @@ class SecurityTest extends IntegrationTest {
 
     private static final RequestPostProcessor TRADER_1 = user("trader1").roles("TRADER");
     private static final RequestPostProcessor TRADER_2 = user("trader2").roles("TRADER");
-    private static final RequestPostProcessor RISK_USER = user("risk1").roles("RISK_MANAGER");
 
     private static final String TRADE_JSON = """
             {"clientTradeId": "%s", "accountCode": "ACC-1001", "symbol": "AAPL",

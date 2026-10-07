@@ -34,7 +34,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    @ExceptionHandler({TradeStateException.class, DuplicateTradeException.class})
+    @ExceptionHandler(InvalidFieldException.class)
+    ProblemDetail handleInvalidField(InvalidFieldException ex) {
+        return invalidFields(Map.of(ex.getField(), ex.getMessage()));
+    }
+
+    @ExceptionHandler({ConflictException.class, TradeStateException.class, DuplicateTradeException.class})
     ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
@@ -53,9 +58,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             errors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
+        return ResponseEntity.badRequest().body(invalidFields(errors));
+    }
+
+    private static ProblemDetail invalidFields(Map<String, String> errors) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                 "Request has invalid fields");
         problem.setProperty("errors", errors);
-        return ResponseEntity.badRequest().body(problem);
+        return problem;
     }
 }
