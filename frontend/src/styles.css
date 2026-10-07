@@ -589,6 +589,13 @@ textarea:focus {
   border-color: var(--red-border);
 }
 
+/* Raised and lowered are both just changes; neither is good or bad on its own. */
+.tag-change {
+  color: var(--blue);
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
+}
+
 .tag-due {
   color: var(--amber);
   background: var(--amber-bg);
@@ -1087,6 +1094,12 @@ td .tag:first-child {
 
 .step-failed .timeline-detail {
   color: var(--red);
+}
+
+.timeline-loading {
+  display: grid;
+  gap: 18px;
+  padding: 4px 0 8px;
 }
 
 /* ---------- New trade ---------- */
@@ -1626,10 +1639,9 @@ td .tag:first-child {
     flex-direction: column;
     align-items: flex-start;
   }
-}
 
-.timeline-loading {
-  display: grid;
-  gap: 18px;
-  padding: 4px 0 8px;
+  /* Names next to codes take too much room in a sideways-scrolling table on a phone. */
+  .data-table .instrument-name {
+    display: none;
+  }
 }

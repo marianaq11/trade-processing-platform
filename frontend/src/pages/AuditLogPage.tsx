@@ -130,11 +130,11 @@ export default function AuditLogPage() {
 function Direction({ from, to }: { from: number | null; to: number }) {
   if (from === null) return <span className="tag tag-muted">Initial setup</span>
   return to > from ? (
-    <span className="tag tag-up">
+    <span className="tag tag-change">
       <span aria-hidden="true">▲</span> Raised
     </span>
   ) : (
-    <span className="tag tag-down">
+    <span className="tag tag-change">
       <span aria-hidden="true">▼</span> Lowered
     </span>
   )
