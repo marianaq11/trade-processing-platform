@@ -5,6 +5,16 @@ target/
 # Node
 node_modules/
 dist/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Local environment overrides (see docker-compose.yml)
+.env
+.env.*
 
 # IDE / OS
 .idea/
@@ -13,5 +23,4 @@ dist/
 .claude/
 .DS_Store
 Thumbs.db
-
-.env
+desktop.ini
