@@ -1,8 +1,12 @@
 package com.tradeplatform.trade;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +24,7 @@ import com.tradeplatform.security.Roles;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 
 // Role checks for submit and cancel are in SecurityConfig.
 @RestController
@@ -49,11 +54,26 @@ public class TradeController {
             @RequestParam(required = false) TradeStatus status,
             @RequestParam(required = false) String account,
             @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) Side side,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate,
+            @RequestParam(defaultValue = "time") @Pattern(regexp = "time|notional|settlementDate") String sort,
+            @RequestParam(defaultValue = "desc") @Pattern(regexp = "asc|desc") String direction,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int size,
             Authentication authentication) {
-        TradeFilter filter = new TradeFilter(status, account, symbol, ownTradesOnly(authentication));
-        return tradeService.findTrades(filter, page, size);
+        TradeFilter filter = new TradeFilter(status, account, symbol, side, tradeDate, ownTradesOnly(authentication));
+        return tradeService.findTrades(filter, toSort(sort, direction), page, size);
+    }
+
+    @GetMapping("/status-counts")
+    public Map<TradeStatus, Long> countByStatus(
+            @RequestParam(required = false) String account,
+            @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) Side side,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate,
+            Authentication authentication) {
+        TradeFilter filter = new TradeFilter(null, account, symbol, side, tradeDate, ownTradesOnly(authentication));
+        return tradeService.countByStatus(filter);
     }
 
     @GetMapping("/{id}")
@@ -70,6 +90,16 @@ public class TradeController {
     public TradeResponse cancelTrade(@PathVariable long id, @Valid @RequestBody CancelTradeRequest request,
                                      Authentication authentication) {
         return tradeService.cancel(id, request.reason(), authentication.getName());
+    }
+
+    // Sorting is limited to a few named columns rather than passing any property name through.
+    private static Sort toSort(String sort, String direction) {
+        Sort.Direction dir = Sort.Direction.fromString(direction);
+        return switch (sort) {
+            case "notional" -> Sort.by(dir, "notional").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "settlementDate" -> Sort.by(dir, "settlementDate").and(Sort.by(Sort.Direction.DESC, "id"));
+            default -> Sort.by(dir, "id");
+        };
     }
 
     // Traders only see trades they submitted. Operations and risk users see everything.

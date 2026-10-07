@@ -2,7 +2,9 @@ package com.tradeplatform.trade;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -21,6 +23,11 @@ import com.tradeplatform.instrument.Instrument;
 import com.tradeplatform.instrument.InstrumentRepository;
 import com.tradeplatform.risk.RiskCheckService;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
+
 @Service
 public class TradeService {
 
@@ -29,16 +36,18 @@ public class TradeService {
     private final InstrumentRepository instrumentRepository;
     private final RiskCheckService riskCheckService;
     private final TransactionTemplate transactionTemplate;
+    private final EntityManager entityManager;
     private final Clock clock;
 
     public TradeService(TradeRepository tradeRepository, AccountRepository accountRepository,
                         InstrumentRepository instrumentRepository, RiskCheckService riskCheckService,
-                        TransactionTemplate transactionTemplate, Clock clock) {
+                        TransactionTemplate transactionTemplate, EntityManager entityManager, Clock clock) {
         this.tradeRepository = tradeRepository;
         this.accountRepository = accountRepository;
         this.instrumentRepository = instrumentRepository;
         this.riskCheckService = riskCheckService;
         this.transactionTemplate = transactionTemplate;
+        this.entityManager = entityManager;
         this.clock = clock;
     }
 
@@ -129,10 +138,30 @@ public class TradeService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<TradeResponse> findTrades(TradeFilter filter, int page, int size) {
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
+    public PageResponse<TradeResponse> findTrades(TradeFilter filter, Sort sort, int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, sort);
         return PageResponse.from(tradeRepository.findAll(filter.toSpecification(), pageRequest)
                 .map(TradeResponse::from));
+    }
+
+    // One grouped query for the status tabs on the blotter. Statuses with no trades come back as 0.
+    @Transactional(readOnly = true)
+    public Map<TradeStatus, Long> countByStatus(TradeFilter filter) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
+        Root<Trade> trade = query.from(Trade.class);
+        query.multiselect(trade.get("status"), cb.count(trade))
+                .where(filter.withoutStatus().toSpecification().toPredicate(trade, query, cb))
+                .groupBy(trade.get("status"));
+
+        Map<TradeStatus, Long> counts = new EnumMap<>(TradeStatus.class);
+        for (TradeStatus status : TradeStatus.values()) {
+            counts.put(status, 0L);
+        }
+        for (Object[] row : entityManager.createQuery(query).getResultList()) {
+            counts.put((TradeStatus) row[0], (Long) row[1]);
+        }
+        return counts;
     }
 
     // restrictToSubmitter is set for traders, who can only see their own trades.
