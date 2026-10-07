@@ -208,7 +208,9 @@ function Timeline({ trade, events }: { trade: Trade; events: TradeEvent[] }) {
               <div className="timeline-meta">
                 <time dateTime={e.createdAt}>{formatDateTime(e.createdAt)} ET</time> · {e.performedBy}
               </div>
-              {e.detail && e.toStatus !== 'RECEIVED' && <div className="timeline-detail">{e.detail}</div>}
+              {e.detail && e.toStatus !== 'RECEIVED' && e.detail !== statusLabels[e.toStatus] && (
+                <div className="timeline-detail">{e.detail}</div>
+              )}
             </div>
           </li>
         )

@@ -63,7 +63,10 @@ export default function NewTradePage() {
     setSymbol(value)
     clearError('symbol')
     const selected = instruments.data?.find((i) => i.symbol === value)
-    if (selected && !priceText) setPriceText(formatPrice(selected.referencePrice))
+    if (selected && !priceText) {
+      setPriceText(formatPrice(selected.referencePrice))
+      clearError('price')
+    }
   }
 
   function validate(): Errors {

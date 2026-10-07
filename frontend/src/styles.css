@@ -541,9 +541,10 @@ textarea:focus {
   border-color: var(--amber-border);
 }
 
+/* The badge already says "Rejected" in red; the reason doesn't need to shout too. */
 .status-reason {
   margin-left: 8px;
-  color: var(--red);
+  color: var(--text-2);
   font-size: 12.5px;
 }
 
@@ -692,7 +693,10 @@ td .tag:first-child {
   opacity: 0.6;
 }
 
+/* position: relative keeps absolutely positioned bits inside (like the visually hidden
+   "Actions" header). Without it they escape the scroll box and widen the page on phones. */
 .table-scroll {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -1134,6 +1138,7 @@ td .tag:first-child {
 }
 
 .side-option {
+  position: relative;
   flex: 1;
   padding: 8px 0;
   border: 1px solid var(--border-strong);
@@ -1165,8 +1170,14 @@ td .tag:first-child {
   position: relative;
 }
 
+/* The real radio stays in the page for keyboard and screen reader use, sized to its label
+   so it can't stick out (the form's `input { width: 100% }` would otherwise apply). */
 .side-option input {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }

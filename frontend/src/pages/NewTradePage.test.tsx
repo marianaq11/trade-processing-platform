@@ -73,6 +73,11 @@ describe('new trade form', () => {
     expect(screen.getByText('Choose an instrument')).toBeInTheDocument()
     expect(screen.getByText('Enter a quantity')).toBeInTheDocument()
     expect(submitted).toHaveLength(0)
+
+    // picking an instrument fills in its price, so the price error shouldn't hang around
+    await user.selectOptions(screen.getByLabelText('Instrument'), 'AAPL')
+    expect(screen.getByLabelText('Price (USD)')).toHaveValue('230.00')
+    expect(screen.queryByText('Enter a price')).not.toBeInTheDocument()
   })
 
   it('fills in the reference price and submits the trade', async () => {
