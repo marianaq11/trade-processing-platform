@@ -14,8 +14,8 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-// Scheduled settlement is switched off so it can't fire in the middle of a test.
-@SpringBootTest(properties = "settlement.cron=-")
+// Scheduled settlement is off so it can't fire mid-test, and the demo data isn't loaded.
+@SpringBootTest(properties = {"settlement.cron=-", "spring.flyway.locations=classpath:db/migration"})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Sql("/reset-test-data.sql")
