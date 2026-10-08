@@ -188,6 +188,17 @@ describe('new trade form', () => {
     expect(submitted[0]).toMatchObject({ quantity: 1500, price: 1230.5 })
   })
 
+  it("doesn't round a long fractional quantity to a whole number", async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user, 'ACC-1001', '1.0000000000000001')
+
+    await submit(user)
+
+    expect(screen.getByLabelText('Quantity (shares)')).toHaveValue('1.0000000000000001')
+    expect(screen.getByText('Must be a whole number of shares')).toBeInTheDocument()
+    expect(submitted).toHaveLength(0)
+  })
+
   it('warns before submitting for a suspended account', async () => {
     const { user } = setUp(() => json(trade(), 201))
     await fillIn(user, 'ACC-1004')
