@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ApiError, apiPut, errorMessage } from '../api/client.ts'
-import type { RiskLimit, RiskLimitField } from '../api/types.ts'
+import type { Decimal, RiskLimit, RiskLimitField } from '../api/types.ts'
 import { useApi } from '../api/useApi.ts'
 import Dialog from '../components/Dialog.tsx'
 import { Banner, ErrorBanner, LoadingRows } from '../components/Feedback.tsx'
 import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
-import { formatDateTime, formatMoney, formatPercent, parseNumber } from '../format.ts'
+import { compareDecimals, decimalPlaces, formatDateTime, formatMoney, formatPercent, parseDecimal } from '../format.ts'
 import { riskFieldLabels } from '../labels.ts'
 
 export default function RiskLimitsPage() {
@@ -134,11 +134,12 @@ export default function RiskLimitsPage() {
   )
 }
 
-function Usage({ used, limit }: { used: number; limit: number | null }) {
+function Usage({ used, limit }: { used: Decimal; limit: Decimal | null }) {
   if (limit === null) {
     return <span className="tabular">{formatMoney(used)}</span>
   }
-  const pct = (used / limit) * 100
+  // Only drives the bar, so JS number precision is enough here.
+  const pct = (Number(used) / Number(limit)) * 100
   const level = pct >= 100 ? 'full' : pct >= 80 ? 'high' : 'normal'
   return (
     <div className="usage">
@@ -159,8 +160,15 @@ const FIELDS: { field: RiskLimitField; key: 'maxTradeNotional' | 'maxDailyNotion
   { field: 'PRICE_TOLERANCE_PCT', key: 'priceTolerancePct' },
 ]
 
-const formatLimit = (field: RiskLimitField, value: number) =>
+const formatLimit = (field: RiskLimitField, value: Decimal) =>
   field === 'PRICE_TOLERANCE_PCT' ? formatPercent(value) : formatMoney(value)
+
+// Limits stay as decimal text all the way to the API. As a JS number, 99999999999999.99 would
+// be sent as ...98. More than 2 decimal places is an error, not something to round.
+function parseLimit(text: string): Decimal | undefined {
+  const value = parseDecimal(text)
+  return value !== undefined && decimalPlaces(value) <= 2 ? value : undefined
+}
 
 interface EditProps {
   limit: RiskLimit
@@ -174,7 +182,7 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
   const [values, setValues] = useState<Record<string, string>>({
     maxTradeNotional: limit.maxTradeNotional === null ? '' : formatMoney(limit.maxTradeNotional),
     maxDailyNotional: limit.maxDailyNotional === null ? '' : formatMoney(limit.maxDailyNotional),
-    priceTolerancePct: limit.priceTolerancePct === null ? '' : limit.priceTolerancePct.toFixed(2),
+    priceTolerancePct: limit.priceTolerancePct ?? '',
   })
   const [reason, setReason] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -183,16 +191,20 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
   const [saving, setSaving] = useState(false)
 
   const changes = FIELDS.flatMap(({ field, key }) => {
-    const next = parseNumber(values[key])
+    const next = parseLimit(values[key])
     const current = limit[key]
-    return next !== undefined && next !== current ? [{ field, from: current, to: next }] : []
+    return next !== undefined && (current === null || compareDecimals(next, current) !== 0)
+      ? [{ field, from: current, to: next }]
+      : []
   })
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const errors: Record<string, string> = {}
     for (const { key } of FIELDS) {
-      if (parseNumber(values[key]) === undefined) errors[key] = values[key].trim() ? 'Enter a number' : 'Required'
+      const value = parseDecimal(values[key])
+      if (value === undefined) errors[key] = values[key].trim() ? 'Enter a number' : 'Required'
+      else if (decimalPlaces(value) > 2) errors[key] = 'Use at most 2 decimal places'
     }
     if (!reason.trim()) errors.reason = 'Give a reason for the change'
     setFieldErrors(errors)
@@ -206,9 +218,9 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
     setSaving(true)
     try {
       await apiPut(`/api/risk-limits/${limit.accountCode}`, {
-        maxTradeNotional: parseNumber(values.maxTradeNotional),
-        maxDailyNotional: parseNumber(values.maxDailyNotional),
-        priceTolerancePct: parseNumber(values.priceTolerancePct),
+        maxTradeNotional: parseLimit(values.maxTradeNotional),
+        maxDailyNotional: parseLimit(values.maxDailyNotional),
+        priceTolerancePct: parseLimit(values.priceTolerancePct),
         reason: reason.trim(),
         version: limit.version,
       })
@@ -239,8 +251,8 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
               setFieldErrors({ ...fieldErrors, [key]: '' })
             }}
             onBlur={() => {
-              const n = parseNumber(values[key])
-              if (n !== undefined && suffix === 'USD') setValues({ ...values, [key]: formatMoney(n) })
+              const value = parseLimit(values[key])
+              if (value !== undefined && suffix === 'USD') setValues({ ...values, [key]: formatMoney(value) })
             }}
             aria-invalid={!!fieldErrors[key]}
             aria-describedby={messageId(key)}

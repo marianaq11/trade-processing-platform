@@ -78,7 +78,7 @@ class RiskLimitApiTest extends IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(4)))
                 .andExpect(jsonPath("$[0].accountCode").value("ACC-1001"))
-                .andExpect(jsonPath("$[0].maxTradeNotional").value(1000000.0))
+                .andExpect(jsonPath("$[0].maxTradeNotional").value("1000000.00"))
                 .andExpect(jsonPath("$[0].updatedBy").value("system"))
                 .andExpect(jsonPath("$[2].accountCode").value("ACC-1003"))
                 .andExpect(jsonPath("$[2].maxTradeNotional").value(nullValue()))
@@ -95,8 +95,8 @@ class RiskLimitApiTest extends IntegrationTest {
 
         mockMvc.perform(get("/api/risk-limits").with(RISK_USER))
                 .andExpect(jsonPath("$[1].accountCode").value("ACC-1002"))
-                .andExpect(jsonPath("$[1].usedToday").value(230000.0))
-                .andExpect(jsonPath("$[0].usedToday").value(0));
+                .andExpect(jsonPath("$[1].usedToday").value("230000.0000"))
+                .andExpect(jsonPath("$[0].usedToday").value("0"));
     }
 
     @Test
@@ -105,8 +105,8 @@ class RiskLimitApiTest extends IntegrationTest {
 
         updateLimits("ACC-1001", "1000000", "7500000", "7.5", "Approved by credit committee", 0L)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.maxDailyNotional").value(7500000))
-                .andExpect(jsonPath("$.priceTolerancePct").value(7.5))
+                .andExpect(jsonPath("$.maxDailyNotional").value("7500000"))
+                .andExpect(jsonPath("$.priceTolerancePct").value("7.5"))
                 .andExpect(jsonPath("$.updatedBy").value("risk1"))
                 .andExpect(jsonPath("$.updatedAt").value("2026-10-05T18:30:00Z"))
                 .andExpect(jsonPath("$.version").value(1));
@@ -114,9 +114,9 @@ class RiskLimitApiTest extends IntegrationTest {
         // max trade notional didn't change, so only two rows
         mockMvc.perform(get("/api/risk-limit-changes").with(RISK_USER))
                 .andExpect(jsonPath("$.totalElements").value(2))
-                .andExpect(jsonPath("$.content[?(@.field == 'MAX_DAILY_NOTIONAL')].oldValue").value(5000000.0))
-                .andExpect(jsonPath("$.content[?(@.field == 'MAX_DAILY_NOTIONAL')].newValue").value(7500000.0))
-                .andExpect(jsonPath("$.content[?(@.field == 'PRICE_TOLERANCE_PCT')].oldValue").value(10.0))
+                .andExpect(jsonPath("$.content[?(@.field == 'MAX_DAILY_NOTIONAL')].oldValue").value("5000000.00"))
+                .andExpect(jsonPath("$.content[?(@.field == 'MAX_DAILY_NOTIONAL')].newValue").value("7500000.00"))
+                .andExpect(jsonPath("$.content[?(@.field == 'PRICE_TOLERANCE_PCT')].oldValue").value("10.00"))
                 .andExpect(jsonPath("$.content[0].accountCode").value("ACC-1001"))
                 .andExpect(jsonPath("$.content[0].changedBy").value("risk1"))
                 .andExpect(jsonPath("$.content[0].reason").value("Approved by credit committee"))
@@ -144,7 +144,7 @@ class RiskLimitApiTest extends IntegrationTest {
 
         assertThat(auditRowCount()).isEqualTo(1);
         mockMvc.perform(get("/api/risk-limits").with(RISK_USER))
-                .andExpect(jsonPath("$[0].maxTradeNotional").value(900000));
+                .andExpect(jsonPath("$[0].maxTradeNotional").value("900000.00"));
     }
 
     @Test
@@ -182,6 +182,34 @@ class RiskLimitApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.errors.maxDailyNotional").value("Use at most 15 digits and 2 decimal places"))
                 .andExpect(jsonPath("$.errors.priceTolerancePct").value("Can't be more than 100%"))
                 .andExpect(jsonPath("$.errors.reason").value("Give a reason for the change"));
+
+        assertThat(auditRowCount()).isZero();
+    }
+
+    // Amounts go out as JSON strings: as numbers, the browser reads 99999999999999.99 as ...98.
+    // Requests can use either; the UI sends strings.
+    @Test
+    void largeAmountsRoundTripExactly() throws Exception {
+        updateLimits("ACC-1001", "\"99999999999999.99\"", "999999999999999.99", "\"7.25\"", "Max out", 0L)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxTradeNotional").value("99999999999999.99"));
+
+        mockMvc.perform(get("/api/risk-limits").with(RISK_USER))
+                .andExpect(jsonPath("$[0].maxTradeNotional").value("99999999999999.99"))
+                .andExpect(jsonPath("$[0].maxDailyNotional").value("999999999999999.99"))
+                .andExpect(jsonPath("$[0].priceTolerancePct").value("7.25"));
+        mockMvc.perform(get("/api/risk-limit-changes").param("field", "MAX_TRADE_NOTIONAL").with(RISK_USER))
+                .andExpect(jsonPath("$.content[0].oldValue").value("1000000.00"))
+                .andExpect(jsonPath("$.content[0].newValue").value("99999999999999.99"));
+    }
+
+    @Test
+    void amountsBeyondTheSupportedPrecisionAreRejectedNotRounded() throws Exception {
+        updateLimits("ACC-1001", "\"1000.129\"", "\"1000000000000000.00\"", "\"7.555\"", "test", 0L)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.maxTradeNotional").value("Use at most 15 digits and 2 decimal places"))
+                .andExpect(jsonPath("$.errors.maxDailyNotional").value("Use at most 15 digits and 2 decimal places"))
+                .andExpect(jsonPath("$.errors.priceTolerancePct").value("Use at most 2 decimal places"));
 
         assertThat(auditRowCount()).isZero();
     }
@@ -230,7 +258,7 @@ class RiskLimitApiTest extends IntegrationTest {
 
         mockMvc.perform(get("/api/risk-limit-changes").with(RISK_USER))
                 .andExpect(jsonPath("$.content[0].reason").value("Afternoon"))
-                .andExpect(jsonPath("$.content[0].oldValue").value(900000))
+                .andExpect(jsonPath("$.content[0].oldValue").value("900000.00"))
                 .andExpect(jsonPath("$.content[1].reason").value("Morning"));
     }
 

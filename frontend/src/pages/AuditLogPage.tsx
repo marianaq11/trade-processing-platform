@@ -1,15 +1,15 @@
 import { useSearchParams } from 'react-router'
-import type { Account, Page, RiskLimitChange, RiskLimitField } from '../api/types.ts'
+import type { Account, Decimal, Page, RiskLimitChange, RiskLimitField } from '../api/types.ts'
 import { useApi } from '../api/useApi.ts'
 import { EmptyState, ErrorBanner, LoadingRows } from '../components/Feedback.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import Pagination from '../components/Pagination.tsx'
-import { formatDateTime, formatMoney, formatPercent } from '../format.ts'
+import { compareDecimals, formatDateTime, formatMoney, formatPercent } from '../format.ts'
 import { riskFieldLabels } from '../labels.ts'
 
 const PAGE_SIZE = 25
 
-const formatValue = (field: RiskLimitField, value: number) =>
+const formatValue = (field: RiskLimitField, value: Decimal) =>
   field === 'PRICE_TOLERANCE_PCT' ? formatPercent(value) : formatMoney(value)
 
 export default function AuditLogPage() {
@@ -127,9 +127,9 @@ export default function AuditLogPage() {
   )
 }
 
-function Direction({ from, to }: { from: number | null; to: number }) {
+function Direction({ from, to }: { from: Decimal | null; to: Decimal }) {
   if (from === null) return <span className="tag tag-muted">Initial setup</span>
-  return to > from ? (
+  return compareDecimals(to, from) > 0 ? (
     <span className="tag tag-change">
       <span aria-hidden="true">▲</span> Raised
     </span>

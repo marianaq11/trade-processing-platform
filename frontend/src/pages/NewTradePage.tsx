@@ -49,6 +49,8 @@ export default function NewTradePage() {
   const account = accounts.data?.find((a) => a.code === accountCode)
   const instrument = instruments.data?.find((i) => i.symbol === symbol)
   const quantity = parseNumber(quantityText)
+  // Checked on the text: as a JS number, "1.0000000000000001" is exactly 1.
+  const wholeQuantity = quantity !== undefined && !/\.\d*[1-9]/.test(quantityText)
   const price = parseNumber(priceText)
   const notional = quantity && price ? quantity * price : undefined
   const deviationPct =
@@ -73,10 +75,10 @@ export default function NewTradePage() {
     const errors: Errors = {}
     if (!accountCode) errors.accountCode = 'Choose an account'
     if (!symbol) errors.symbol = 'Choose an instrument'
-    if (quantity === undefined) errors.quantity = 'Enter a quantity'
-    else if (!Number.isInteger(quantity) || quantity <= 0) errors.quantity = 'Must be a whole number of shares'
+    if (quantity === undefined) errors.quantity = quantityText.trim() ? 'Enter a number' : 'Enter a quantity'
+    else if (!wholeQuantity || quantity <= 0) errors.quantity = 'Must be a whole number of shares'
     else if (quantity > MAX_QUANTITY) errors.quantity = `Can't be more than ${formatQuantity(MAX_QUANTITY)}`
-    if (price === undefined) errors.price = 'Enter a price'
+    if (price === undefined) errors.price = priceText.trim() ? 'Enter a number' : 'Enter a price'
     else if (price <= 0) errors.price = 'Must be greater than 0'
     else if (price > MAX_PRICE) errors.price = `Can't be more than ${formatPrice(MAX_PRICE)}`
     else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
@@ -222,7 +224,7 @@ export default function NewTradePage() {
                   setQuantityText(e.target.value)
                   clearError('quantity')
                 }}
-                onBlur={() => quantity !== undefined && Number.isInteger(quantity) && setQuantityText(formatQuantity(quantity))}
+                onBlur={() => wholeQuantity && setQuantityText(formatQuantity(quantity))}
                 aria-invalid={!!fieldErrors.quantity}
                 aria-describedby={messageId('quantity')}
               />

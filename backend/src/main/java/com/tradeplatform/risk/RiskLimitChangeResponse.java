@@ -3,12 +3,15 @@ package com.tradeplatform.risk;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
+// Values are strings for the same reason as in RiskLimitResponse.
 public record RiskLimitChangeResponse(
         long id,
         String accountCode,
         RiskLimitField field,
-        BigDecimal oldValue,
-        BigDecimal newValue,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal oldValue,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal newValue,
         String reason,
         String changedBy,
         Instant changedAt) {
