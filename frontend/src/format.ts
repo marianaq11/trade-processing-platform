@@ -1,11 +1,14 @@
+import type { Decimal } from './api/types.ts'
+
 const moneyFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const priceFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 const quantityFormat = new Intl.NumberFormat('en-US')
 
-export const formatMoney = (value: number) => moneyFormat.format(value)
+// Intl formats decimal text exactly, without going through a JS number first.
+export const formatMoney = (value: number | Decimal) => moneyFormat.format(value)
 export const formatPrice = (value: number) => priceFormat.format(value)
 export const formatQuantity = (value: number) => quantityFormat.format(value)
-export const formatPercent = (value: number) => `${moneyFormat.format(value)}%`
+export const formatPercent = (value: number | Decimal) => `${moneyFormat.format(value)}%`
 
 export const formatTradeId = (id: number) => `T-${String(id).padStart(6, '0')}`
 
@@ -68,8 +71,32 @@ export function formatBusinessDate(isoDate: string): string {
 // "23,00" or "1,,000", makes the input invalid: dropping it would change the value.
 const NUMBER_INPUT = /^-?(\d+|[1-9]\d{0,2}(,\d{3})+)?(\.\d+)?$/
 
-export function parseNumber(text: string): number | undefined {
+// Returns typed input as plain decimal text ("1500.25"), keeping every digit.
+export function parseDecimal(text: string): Decimal | undefined {
   const trimmed = text.trim()
   if (!/\d/.test(trimmed) || !NUMBER_INPUT.test(trimmed)) return undefined
-  return Number(trimmed.replace(/,/g, ''))
+  return trimmed.replace(/,/g, '') as Decimal
+}
+
+export function parseNumber(text: string): number | undefined {
+  const decimal = parseDecimal(text)
+  return decimal === undefined ? undefined : Number(decimal)
+}
+
+// Digits after the decimal point as written, so "1.50" has 2.
+export function decimalPlaces(value: Decimal): number {
+  return (value.split('.')[1] ?? '').length
+}
+
+// Exact, unlike comparing JS numbers: 99999999999999.98 and 99999999999999.99 are the same number.
+export function compareDecimals(a: Decimal, b: Decimal): number {
+  const places = Math.max(decimalPlaces(a), decimalPlaces(b))
+  const diff = scaled(a, places) - scaled(b, places)
+  return diff === 0n ? 0 : diff > 0n ? 1 : -1
+}
+
+// "-12.5" with 2 places -> -1250n
+function scaled(value: Decimal, places: number): bigint {
+  const [whole, fraction = ''] = value.split('.')
+  return BigInt(whole + fraction.padEnd(places, '0'))
 }

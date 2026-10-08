@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatTradeId, nextBusinessDay, parseNumber } from './format.ts'
+import {
+  compareDecimals,
+  decimalPlaces,
+  formatDateTime,
+  formatMoney,
+  formatTradeId,
+  nextBusinessDay,
+  parseDecimal,
+  parseNumber,
+} from './format.ts'
 
 describe('formatDateTime', () => {
   it('shows New York time whatever the browser time zone is', () => {
@@ -55,6 +64,46 @@ describe('parseNumber', () => {
     expect(parseNumber('-')).toBeUndefined()
     expect(parseNumber('.')).toBeUndefined()
     expect(parseNumber('1.')).toBeUndefined()
+  })
+})
+
+describe('parseDecimal', () => {
+  it('keeps every digit the user typed', () => {
+    expect(parseDecimal('99,999,999,999,999.99')).toBe('99999999999999.99')
+    expect(parseDecimal(' 1000.129 ')).toBe('1000.129')
+    expect(parseDecimal('1,5')).toBeUndefined()
+  })
+})
+
+describe('decimalPlaces', () => {
+  it('counts digits after the point as written', () => {
+    expect(decimalPlaces('1000')).toBe(0)
+    expect(decimalPlaces('1000.10')).toBe(2)
+    expect(decimalPlaces('1000.129')).toBe(3)
+  })
+})
+
+describe('compareDecimals', () => {
+  it('tells apart amounts that are the same JS number', () => {
+    expect(Number('99999999999999.98')).toBe(Number('99999999999999.99'))
+    expect(compareDecimals('99999999999999.98', '99999999999999.99')).toBe(-1)
+    expect(compareDecimals('99999999999999.99', '99999999999999.98')).toBe(1)
+  })
+
+  it('ignores how many decimal places are written', () => {
+    expect(compareDecimals('1000000', '1000000.00')).toBe(0)
+    expect(compareDecimals('7.5', '10.00')).toBe(-1)
+    expect(compareDecimals('-.5', '0')).toBe(-1)
+  })
+})
+
+describe('formatMoney', () => {
+  it('formats decimal text without rounding it to a JS number first', () => {
+    // what the limit used to show when the API sent it as a JSON number
+    expect(formatMoney(Number('99999999999999.99'))).toBe('99,999,999,999,999.98')
+    expect(formatMoney('99999999999999.99')).toBe('99,999,999,999,999.99')
+    // the largest limit the API accepts
+    expect(formatMoney('999999999999999.99')).toBe('999,999,999,999,999.99')
   })
 })
 

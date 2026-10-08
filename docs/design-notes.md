@@ -156,6 +156,11 @@ Found by poking at the API with curl:
 
 - Number fields accept plain numbers (`1500.25`) and US thousands grouping (`1,500.25`). Any
   other comma, as in `1,5` or `1,,000`, is an error. Dropping it would change the value.
+- Risk limit amounts, usage and audit log values are sent as JSON strings (`"99999999999999.99"`).
+  Limits allow 15 integer digits and 2 decimal places, more than a JS number holds exactly, so the
+  browser would round them as JSON numbers. `PUT /api/risk-limits/{account}` accepts strings or
+  numbers, and the backend still uses `BigDecimal`. More than 2 decimal places is rejected, not
+  rounded.
 
 ## Demo data
 

@@ -81,15 +81,19 @@ export interface SubmitTradeRequest {
   price: number
 }
 
+// Exact decimal text such as "1000000.00". Risk limit amounts use this instead of number
+// because limits go up to 999,999,999,999,999.99, more digits than a JS number keeps.
+export type Decimal = `${number}`
+
 // Limit fields are null for an account that has no limits set up yet.
 export interface RiskLimit {
   accountCode: string
   accountName: string
   accountStatus: 'ACTIVE' | 'SUSPENDED'
-  maxTradeNotional: number | null
-  maxDailyNotional: number | null
-  priceTolerancePct: number | null
-  usedToday: number
+  maxTradeNotional: Decimal | null
+  maxDailyNotional: Decimal | null
+  priceTolerancePct: Decimal | null
+  usedToday: Decimal
   updatedAt: string | null
   updatedBy: string | null
   version: number | null
@@ -99,8 +103,8 @@ export interface RiskLimitChange {
   id: number
   accountCode: string
   field: RiskLimitField
-  oldValue: number | null
-  newValue: number
+  oldValue: Decimal | null
+  newValue: Decimal
   reason: string
   changedBy: string
   changedAt: string
