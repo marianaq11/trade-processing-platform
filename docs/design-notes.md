@@ -164,6 +164,9 @@ Found by poking at the API with curl:
 - Trade notionals are sent as strings too, always with 4 decimal places (`"99999989900000.0100"`).
   As a JSON number that one reads as ...900,000.02. The new trade form works out its notional
   preview from the typed quantity and price with `BigInt`, not by multiplying JS numbers.
+- The risk limit editor checks the backend's ranges before saving, comparing amounts as decimals:
+  notional limits from 0.01 to 999,999,999,999,999.99, tolerance from 0.01 to 100%, and the
+  per-trade limit no higher than the daily one. The backend still checks all of these.
 
 ## Demo data
 

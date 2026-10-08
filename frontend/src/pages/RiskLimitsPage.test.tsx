@@ -142,4 +142,72 @@ describe('risk limits', () => {
 
     expect(saved).toEqual([expect.objectContaining({ maxTradeNotional: '1500000.00', maxDailyNotional: '2500000.50' })])
   })
+
+  it('rejects limits outside the allowed ranges', async () => {
+    const { saved, user } = setUp(riskLimit())
+    await openEditor(user)
+
+    await replace(user, 'Max notional per trade', '0')
+    // the same JS number as 999,999,999,999,999.99, the largest allowed
+    await replace(user, 'Max notional per day', '1,000,000,000,000,000')
+    await replace(user, 'Price tolerance vs reference price', '100.01')
+    await user.type(screen.getByLabelText('Reason'), 'Test')
+
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+    await save(user)
+
+    expect(screen.getByText('Must be greater than 0')).toBeInTheDocument()
+    expect(screen.getByText("Can't be more than 999,999,999,999,999.99")).toBeInTheDocument()
+    expect(screen.getByText("Can't be more than 100.00%")).toBeInTheDocument()
+
+    await replace(user, 'Max notional per trade', '-5')
+    await replace(user, 'Price tolerance vs reference price', '0.00')
+    await save(user)
+
+    expect(screen.getAllByText('Must be greater than 0')).toHaveLength(2)
+    expect(saved).toHaveLength(0)
+  })
+
+  it('accepts the ends of the ranges', async () => {
+    const { saved, user } = setUp(riskLimit())
+    await openEditor(user)
+
+    await replace(user, 'Max notional per trade', '0.01')
+    await replace(user, 'Max notional per day', '999,999,999,999,999.99')
+    await replace(user, 'Price tolerance vs reference price', '100')
+    await user.type(screen.getByLabelText('Reason'), 'Edges')
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    await save(user)
+
+    expect(saved[0]).toMatchObject({
+      maxTradeNotional: '0.01',
+      maxDailyNotional: '999999999999999.99',
+      priceTolerancePct: '100',
+    })
+  })
+
+  it("won't save a per-trade limit above the daily limit", async () => {
+    const { saved, user } = setUp(riskLimit())
+    await openEditor(user)
+
+    await replace(user, 'Max notional per trade', '5000000.01')
+    await user.type(screen.getByLabelText('Reason'), 'Test')
+
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+    await save(user)
+    expect(screen.getByText("Can't be more than the daily limit")).toBeInTheDocument()
+
+    // as JS numbers these two are equal
+    await replace(user, 'Max notional per trade', '999999999999999.99')
+    await replace(user, 'Max notional per day', '999999999999999.98')
+    await save(user)
+    expect(screen.getByText("Can't be more than the daily limit")).toBeInTheDocument()
+    expect(saved).toHaveLength(0)
+
+    // equal to the daily limit is fine
+    await replace(user, 'Max notional per trade', '999999999999999.98')
+    await save(user)
+    expect(saved[0]).toMatchObject({ maxTradeNotional: '999999999999999.98', maxDailyNotional: '999999999999999.98' })
+  })
 })
