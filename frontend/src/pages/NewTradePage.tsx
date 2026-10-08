@@ -12,7 +12,9 @@ import {
   formatPrice,
   formatQuantity,
   formatTradeId,
+  multiplyDecimals,
   nextBusinessDay,
+  parseDecimal,
   parseNumber,
   todayInNewYork,
 } from '../format.ts'
@@ -52,7 +54,6 @@ export default function NewTradePage() {
   // Checked on the text: as a JS number, "1.0000000000000001" is exactly 1.
   const wholeQuantity = quantity !== undefined && !/\.\d*[1-9]/.test(quantityText)
   const price = parseNumber(priceText)
-  const notional = quantity && price ? quantity * price : undefined
   const deviationPct =
     instrument && price ? ((price - instrument.referencePrice) / instrument.referencePrice) * 100 : undefined
   const today = todayInNewYork()
@@ -84,6 +85,14 @@ export default function NewTradePage() {
     else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
     return errors
   }
+
+  // Only for a valid quantity and price, and worked out from the text: as JS numbers,
+  // 9,999,999 x 9,999,999.99 comes out a cent high.
+  const { quantity: quantityError, price: priceError } = validate()
+  const exactQuantity = parseDecimal(quantityText)
+  const exactPrice = parseDecimal(priceText)
+  const notional =
+    exactQuantity && exactPrice && !quantityError && !priceError ? multiplyDecimals(exactQuantity, exactPrice) : undefined
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

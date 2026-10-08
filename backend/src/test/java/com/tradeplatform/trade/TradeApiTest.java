@@ -43,8 +43,25 @@ class TradeApiTest extends IntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"))
-                .andExpect(jsonPath("$.notional").value(23025.0))
+                .andExpect(jsonPath("$.notional").value("23025.0000"))
                 .andExpect(jsonPath("$.rejectionReason").doesNotExist());
+    }
+
+    // As a JSON number, the browser reads 99999989900000.01 as 99999989900000.015625 and shows .02.
+    @Test
+    void largeNotionalIsSentAsExactDecimalText() throws Exception {
+        String json = submit("ACC-1001", "AAPL", "BUY", 9_999_999, "9999999.99")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.notional").isString())
+                .andExpect(jsonPath("$.notional").value("99999989900000.0100"))
+                .andReturn().getResponse().getContentAsString();
+        long id = ((Number) JsonPath.read(json, "$.id")).longValue();
+
+        // read back from the database, the same text
+        mockMvc.perform(get("/api/trades/{id}", id))
+                .andExpect(jsonPath("$.notional").value("99999989900000.0100"));
+        mockMvc.perform(get("/api/trades"))
+                .andExpect(jsonPath("$.content[0].notional").value("99999989900000.0100"));
     }
 
     @Test

@@ -95,6 +95,17 @@ export function compareDecimals(a: Decimal, b: Decimal): number {
   return diff === 0n ? 0 : diff > 0n ? 1 : -1
 }
 
+// Exact product, keeping every digit: 9999999 x 9999999.99 is 99999989900000.01, but as JS
+// numbers it comes out as 99999989900000.015625.
+export function multiplyDecimals(a: Decimal, b: Decimal): Decimal {
+  const places = decimalPlaces(a) + decimalPlaces(b)
+  const product = scaled(a, decimalPlaces(a)) * scaled(b, decimalPlaces(b))
+  const digits = (product < 0n ? -product : product).toString().padStart(places + 1, '0')
+  const sign = product < 0n ? '-' : ''
+  const whole = digits.slice(0, digits.length - places)
+  return (places === 0 ? `${sign}${whole}` : `${sign}${whole}.${digits.slice(-places)}`) as Decimal
+}
+
 // "-12.5" with 2 places -> -1250n
 function scaled(value: Decimal, places: number): bigint {
   const [whole, fraction = ''] = value.split('.')

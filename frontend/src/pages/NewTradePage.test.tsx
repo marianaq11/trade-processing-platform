@@ -1,8 +1,7 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import type { Trade } from '../api/types.ts'
-import { json, mockFetch, renderAs, unexpected, userWithRole } from '../test/helpers.tsx'
+import { json, mockFetch, renderAs, trade, unexpected, userWithRole } from '../test/helpers.tsx'
 import NewTradePage from './NewTradePage.tsx'
 
 const accounts = [
@@ -10,30 +9,6 @@ const accounts = [
   { code: 'ACC-1004', name: 'Old Mill Capital', status: 'SUSPENDED' },
 ]
 const instruments = [{ symbol: 'AAPL', name: 'Apple Inc.', referencePrice: 230, active: true }]
-
-function trade(overrides: Partial<Trade> = {}): Trade {
-  return {
-    id: 42,
-    clientTradeId: 'x',
-    accountCode: 'ACC-1001',
-    accountName: 'Harbor Growth Fund',
-    symbol: 'AAPL',
-    instrumentName: 'Apple Inc.',
-    side: 'BUY',
-    quantity: 100,
-    price: 230,
-    notional: 23000,
-    tradeDate: '2026-10-05',
-    settlementDate: '2026-10-06',
-    status: 'ACCEPTED',
-    rejectionReason: null,
-    rejectionDetail: null,
-    submittedBy: 'trader',
-    createdAt: '2026-10-05T14:00:00Z',
-    updatedAt: '2026-10-05T14:00:00Z',
-    ...overrides,
-  }
-}
 
 // Answers the two lookups the form needs; every POST /api/trades goes to `onSubmit`.
 function setUp(onSubmit: (body: Record<string, unknown>) => Response | Promise<Response>) {
@@ -61,6 +36,13 @@ async function fillIn(user: ReturnType<typeof userEvent.setup>, account = 'ACC-1
 
 const submit = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole('button', { name: /Submit (buy|sell) trade/ }))
+
+async function typePrice(user: ReturnType<typeof userEvent.setup>, text: string) {
+  await user.clear(screen.getByLabelText('Price (USD)'))
+  await user.type(screen.getByLabelText('Price (USD)'), text)
+}
+
+const notionalPreview = () => screen.getByText('Notional (USD)').nextElementSibling
 
 describe('new trade form', () => {
   it('checks required fields before sending anything', async () => {
@@ -197,6 +179,37 @@ describe('new trade form', () => {
     expect(screen.getByLabelText('Quantity (shares)')).toHaveValue('1.0000000000000001')
     expect(screen.getByText('Must be a whole number of shares')).toBeInTheDocument()
     expect(submitted).toHaveLength(0)
+  })
+
+  it('works out the notional preview exactly', async () => {
+    const { user } = setUp(() => json(trade(), 201))
+    await fillIn(user, 'ACC-1001', '9,999,999')
+    await typePrice(user, '9,999,999.99')
+
+    // multiplying JS numbers gave 99,999,989,900,000.02
+    expect(notionalPreview()).toHaveTextContent('99,999,989,900,000.01')
+  })
+
+  it("doesn't preview a notional for a quantity or price that won't pass validation", async () => {
+    const { user } = setUp(() => json(trade(), 201))
+    await fillIn(user, 'ACC-1001', '1.5')
+    expect(notionalPreview()).toHaveTextContent('—')
+
+    await user.clear(screen.getByLabelText('Quantity (shares)'))
+    await user.type(screen.getByLabelText('Quantity (shares)'), '100')
+    expect(notionalPreview()).toHaveTextContent('23,000.00')
+    await typePrice(user, '230.00001')
+    expect(notionalPreview()).toHaveTextContent('—')
+  })
+
+  it('shows a large notional to the cent once the trade is booked', async () => {
+    const booked = trade({ quantity: 9999999, price: 9999999.99, notional: '99999989900000.0100' })
+    const { user } = setUp(() => json(booked, 201))
+    await fillIn(user)
+
+    await submit(user)
+
+    expect(await screen.findByText(/notional 99,999,989,900,000\.01 USD/)).toBeInTheDocument()
   })
 
   it('warns before submitting for a suspended account', async () => {

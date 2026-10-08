@@ -4,6 +4,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
+// Notional is sent as a string ("99999989900000.0100"). It can have 14 integer digits and 4
+// decimal places, more than a JS number holds, so as a JSON number the browser would lose cents.
 public record TradeResponse(
         long id,
         String clientTradeId,
@@ -14,7 +18,7 @@ public record TradeResponse(
         Side side,
         long quantity,
         BigDecimal price,
-        BigDecimal notional,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal notional,
         LocalDate tradeDate,
         LocalDate settlementDate,
         TradeStatus status,

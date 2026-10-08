@@ -161,6 +161,9 @@ Found by poking at the API with curl:
   browser would round them as JSON numbers. `PUT /api/risk-limits/{account}` accepts strings or
   numbers, and the backend still uses `BigDecimal`. More than 2 decimal places is rejected, not
   rounded.
+- Trade notionals are sent as strings too, always with 4 decimal places (`"99999989900000.0100"`).
+  As a JSON number that one reads as ...900,000.02. The new trade form works out its notional
+  preview from the typed quantity and price with `BigInt`, not by multiplying JS numbers.
 
 ## Demo data
 
