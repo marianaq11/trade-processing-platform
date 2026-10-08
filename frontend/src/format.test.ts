@@ -72,6 +72,7 @@ describe('parseDecimal', () => {
   it('keeps every digit the user typed', () => {
     expect(parseDecimal('99,999,999,999,999.99')).toBe('99999999999999.99')
     expect(parseDecimal(' 1000.129 ')).toBe('1000.129')
+    expect(parseDecimal('.5')).toBe('.5')
     expect(parseDecimal('1,5')).toBeUndefined()
   })
 })

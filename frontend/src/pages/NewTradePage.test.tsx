@@ -202,6 +202,41 @@ describe('new trade form', () => {
     expect(notionalPreview()).toHaveTextContent('—')
   })
 
+  it('accepts a shorthand price like .5', async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user, 'ACC-1001', '1,000')
+    await typePrice(user, '.5')
+
+    expect(notionalPreview()).toHaveTextContent('500.00')
+    await submit(user)
+
+    expect(await screen.findByRole('heading', { name: 'Trade accepted' })).toBeInTheDocument()
+    expect(submitted[0]).toMatchObject({ quantity: 1000, price: 0.5 })
+  })
+
+  it('still rejects malformed prices and more than 4 decimal places', async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user)
+
+    const cases = [
+      ['1.2.3', 'Enter a number'],
+      ['.', 'Enter a number'],
+      ['5.', 'Enter a number'],
+      ['1,5', 'Enter a number'],
+      ['.12345', 'Use at most 4 decimal places'],
+      ['230.00001', 'Use at most 4 decimal places'],
+      ['0', 'Must be greater than 0'],
+      ['-.5', 'Must be greater than 0'],
+      ['10000000', "Can't be more than 9,999,999.9999"],
+    ]
+    for (const [text, message] of cases) {
+      await typePrice(user, text)
+      await submit(user)
+      expect(screen.getByText(message), text).toBeInTheDocument()
+    }
+    expect(submitted).toHaveLength(0)
+  })
+
   it('shows a large notional to the cent once the trade is booked', async () => {
     const booked = trade({ quantity: 9999999, price: 9999999.99, notional: '99999989900000.0100' })
     const { user } = setUp(() => json(booked, 201))

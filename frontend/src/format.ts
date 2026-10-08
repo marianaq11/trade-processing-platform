@@ -6,7 +6,7 @@ const quantityFormat = new Intl.NumberFormat('en-US')
 
 // Intl formats decimal text exactly, without going through a JS number first.
 export const formatMoney = (value: number | Decimal) => moneyFormat.format(value)
-export const formatPrice = (value: number) => priceFormat.format(value)
+export const formatPrice = (value: number | Decimal) => priceFormat.format(value)
 export const formatQuantity = (value: number) => quantityFormat.format(value)
 export const formatPercent = (value: number | Decimal) => `${moneyFormat.format(value)}%`
 
