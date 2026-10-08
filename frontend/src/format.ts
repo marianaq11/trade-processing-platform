@@ -64,9 +64,29 @@ export function formatBusinessDate(isoDate: string): string {
   })
 }
 
-// Strips thousands separators so "1,500" can be typed into a quantity field.
-export function parseNumber(text: string): number | undefined {
-  const cleaned = text.replace(/,/g, '').trim()
-  if (cleaned === '' || !/^-?\d*\.?\d+$/.test(cleaned)) return undefined
-  return Number(cleaned)
+// Plain numbers ("1500.25", ".5") or US-style thousands grouping ("1,234,567.89"). Anything
+// else, like "1,5" or "1,,000", is rejected instead of guessing what was meant.
+const plainNumber = /^-?(\d+(\.\d+)?|\.\d+)$/
+const groupedNumber = /^-?[1-9]\d{0,2}(,\d{3})+(\.\d+)?$/
+
+function withoutSeparators(text: string): string | undefined {
+  const trimmed = text.trim()
+  if (plainNumber.test(trimmed)) return trimmed
+  if (groupedNumber.test(trimmed)) return trimmed.replace(/,/g, '')
+  return undefined
 }
+
+export function parseNumber(text: string): number | undefined {
+  const plain = withoutSeparators(text)
+  return plain === undefined ? undefined : Number(plain)
+}
+
+// Counted on the text, so a field can reject extra decimals instead of rounding them away.
+// Trailing zeros don't count: "230.5000" is the same price as "230.5".
+export function decimalPlaces(text: string): number {
+  const fraction = withoutSeparators(text)?.split('.')[1] ?? ''
+  return fraction.replace(/0+$/, '').length
+}
+
+export const invalidNumberMessage = (text: string) =>
+  text.includes(',') ? 'Use commas only between thousands' : 'Enter a number'

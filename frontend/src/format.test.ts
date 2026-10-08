@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatTradeId, nextBusinessDay, parseNumber } from './format.ts'
+import { decimalPlaces, formatDateTime, formatTradeId, nextBusinessDay, parseNumber } from './format.ts'
 
 describe('formatDateTime', () => {
   it('shows New York time whatever the browser time zone is', () => {
@@ -21,16 +21,44 @@ describe('nextBusinessDay', () => {
 })
 
 describe('parseNumber', () => {
-  it('accepts thousands separators', () => {
+  it('accepts plain numbers and US thousands separators', () => {
+    expect(parseNumber('1500')).toBe(1500)
+    expect(parseNumber('.5')).toBe(0.5)
     expect(parseNumber('1,500')).toBe(1500)
     expect(parseNumber(' 1,234.5 ')).toBe(1234.5)
+    expect(parseNumber('1,234,567.89')).toBe(1234567.89)
   })
 
-  it('rejects anything that is not a plain number', () => {
+  it('rejects commas that are not thousands separators', () => {
+    expect(parseNumber('1,5')).toBeUndefined()
+    expect(parseNumber('23,00')).toBeUndefined()
+    expect(parseNumber('1,,000')).toBeUndefined()
+    expect(parseNumber('1,0000')).toBeUndefined()
+    expect(parseNumber('1234,567')).toBeUndefined()
+    expect(parseNumber('0,500')).toBeUndefined()
+    expect(parseNumber(',100')).toBeUndefined()
+    expect(parseNumber('100,')).toBeUndefined()
+    expect(parseNumber('1,234.5,6')).toBeUndefined()
+  })
+
+  it('rejects anything else that is not a plain number', () => {
     expect(parseNumber('')).toBeUndefined()
     expect(parseNumber('abc')).toBeUndefined()
     expect(parseNumber('1.2.3')).toBeUndefined()
     expect(parseNumber('12e3')).toBeUndefined()
+    expect(parseNumber('5.')).toBeUndefined()
+  })
+
+  it('keeps every digit of the largest risk limit', () => {
+    expect(JSON.stringify(parseNumber('9,999,999,999,999.99'))).toBe('9999999999999.99')
+  })
+})
+
+describe('decimalPlaces', () => {
+  it('counts digits after the point, ignoring trailing zeros', () => {
+    expect(decimalPlaces('1,000')).toBe(0)
+    expect(decimalPlaces('1,000.555')).toBe(3)
+    expect(decimalPlaces('230.5000')).toBe(1)
   })
 })
 

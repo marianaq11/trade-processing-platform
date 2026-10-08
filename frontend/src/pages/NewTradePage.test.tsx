@@ -80,6 +80,46 @@ describe('new trade form', () => {
     expect(screen.queryByText('Enter a price')).not.toBeInTheDocument()
   })
 
+  it("doesn't guess at numbers with misplaced commas", async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user)
+    const quantity = screen.getByLabelText('Quantity (shares)')
+    const price = screen.getByLabelText('Price (USD)')
+    await user.clear(quantity)
+    await user.type(quantity, '1,5')
+    await user.clear(price)
+    await user.type(price, '23,00')
+
+    // leaving the field used to reformat 1,5 as 15
+    expect(quantity).toHaveValue('1,5')
+    await submit(user)
+
+    expect(screen.getAllByText('Use commas only between thousands')).toHaveLength(2)
+    expect(submitted).toHaveLength(0)
+  })
+
+  it('rejects extra price decimals and sends the largest allowed trade exactly', async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user)
+    const quantity = screen.getByLabelText('Quantity (shares)')
+    const price = screen.getByLabelText('Price (USD)')
+    await user.clear(price)
+    await user.type(price, '230.12345')
+
+    await submit(user)
+    expect(screen.getByText('Use at most 4 decimal places')).toBeInTheDocument()
+    expect(submitted).toHaveLength(0)
+
+    await user.clear(quantity)
+    await user.type(quantity, '10,000,000')
+    await user.clear(price)
+    await user.type(price, '9,999,999.9999')
+    await submit(user)
+
+    expect(await screen.findByRole('heading', { name: 'Trade accepted' })).toBeInTheDocument()
+    expect(submitted[0]).toMatchObject({ quantity: 10_000_000, price: 9999999.9999 })
+  })
+
   it('fills in the reference price and submits the trade', async () => {
     const { submitted, user } = setUp(() => json(trade(), 201))
     await fillIn(user)

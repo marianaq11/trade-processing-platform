@@ -8,10 +8,12 @@ import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import StatusBadge, { SideLabel } from '../components/StatusBadge.tsx'
 import {
+  decimalPlaces,
   formatMoney,
   formatPrice,
   formatQuantity,
   formatTradeId,
+  invalidNumberMessage,
   nextBusinessDay,
   parseNumber,
   todayInNewYork,
@@ -73,13 +75,13 @@ export default function NewTradePage() {
     const errors: Errors = {}
     if (!accountCode) errors.accountCode = 'Choose an account'
     if (!symbol) errors.symbol = 'Choose an instrument'
-    if (quantity === undefined) errors.quantity = 'Enter a quantity'
+    if (quantity === undefined) errors.quantity = quantityText.trim() ? invalidNumberMessage(quantityText) : 'Enter a quantity'
     else if (!Number.isInteger(quantity) || quantity <= 0) errors.quantity = 'Must be a whole number of shares'
     else if (quantity > MAX_QUANTITY) errors.quantity = `Can't be more than ${formatQuantity(MAX_QUANTITY)}`
-    if (price === undefined) errors.price = 'Enter a price'
+    if (price === undefined) errors.price = priceText.trim() ? invalidNumberMessage(priceText) : 'Enter a price'
     else if (price <= 0) errors.price = 'Must be greater than 0'
+    else if (decimalPlaces(priceText) > 4) errors.price = 'Use at most 4 decimal places'
     else if (price > MAX_PRICE) errors.price = `Can't be more than ${formatPrice(MAX_PRICE)}`
-    else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
     return errors
   }
 
@@ -222,7 +224,7 @@ export default function NewTradePage() {
                   setQuantityText(e.target.value)
                   clearError('quantity')
                 }}
-                onBlur={() => quantity !== undefined && Number.isInteger(quantity) && setQuantityText(formatQuantity(quantity))}
+                onBlur={() => !validate().quantity && setQuantityText(formatQuantity(quantity!))}
                 aria-invalid={!!fieldErrors.quantity}
                 aria-describedby={messageId('quantity')}
               />
