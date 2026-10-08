@@ -52,11 +52,11 @@ function setUp(onSubmit: (body: Record<string, unknown>) => Response | Promise<R
   return { submitted, user: userEvent.setup() }
 }
 
-async function fillIn(user: ReturnType<typeof userEvent.setup>, account = 'ACC-1001') {
+async function fillIn(user: ReturnType<typeof userEvent.setup>, account = 'ACC-1001', quantity = '100') {
   await screen.findByRole('option', { name: /ACC-1001/ })
   await user.selectOptions(screen.getByLabelText('Account'), account)
   await user.selectOptions(screen.getByLabelText('Instrument'), 'AAPL')
-  await user.type(screen.getByLabelText('Quantity (shares)'), '100')
+  await user.type(screen.getByLabelText('Quantity (shares)'), quantity)
 }
 
 const submit = (user: ReturnType<typeof userEvent.setup>) =>
@@ -164,6 +164,28 @@ describe('new trade form', () => {
 
     expect(await screen.findByText("You aren't entitled to trade on any accounts yet.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument()
+  })
+
+  it('rejects misplaced commas instead of dropping them', async () => {
+    const { submitted, user } = setUp(() => json(trade(), 201))
+    await fillIn(user, 'ACC-1001', '1,5')
+    await user.clear(screen.getByLabelText('Price (USD)'))
+    await user.type(screen.getByLabelText('Price (USD)'), '23,00')
+
+    // these used to go through as 15 shares at 2,300.00
+    expect(screen.getByLabelText('Quantity (shares)')).toHaveValue('1,5')
+    await submit(user)
+
+    expect(screen.getAllByText('Enter a number')).toHaveLength(2)
+    expect(submitted).toHaveLength(0)
+
+    await user.clear(screen.getByLabelText('Quantity (shares)'))
+    await user.type(screen.getByLabelText('Quantity (shares)'), '1,500')
+    await user.clear(screen.getByLabelText('Price (USD)'))
+    await user.type(screen.getByLabelText('Price (USD)'), '1,230.50')
+    await submit(user)
+
+    expect(submitted[0]).toMatchObject({ quantity: 1500, price: 1230.5 })
   })
 
   it('warns before submitting for a suspended account', async () => {

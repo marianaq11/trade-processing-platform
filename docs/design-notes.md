@@ -152,6 +152,11 @@ Found by poking at the API with curl:
   `NUMERIC(19,4)` notional column.
 - Page numbers and page sizes are bounded; sorting only accepts a few named columns.
 
+## Numbers in the UI
+
+- Number fields accept plain numbers (`1500.25`) and US thousands grouping (`1,500.25`). Any
+  other comma, as in `1,5` or `1,,000`, is an error. Dropping it would change the value.
+
 ## Demo data
 
 `db/demo/R__demo_data.sql` inserts a few days of trade history and some limit changes, relative

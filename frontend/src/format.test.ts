@@ -24,6 +24,27 @@ describe('parseNumber', () => {
   it('accepts thousands separators', () => {
     expect(parseNumber('1,500')).toBe(1500)
     expect(parseNumber(' 1,234.5 ')).toBe(1234.5)
+    expect(parseNumber('1,234,567.89')).toBe(1234567.89)
+    expect(parseNumber('-1,000')).toBe(-1000)
+  })
+
+  it('accepts plain decimals', () => {
+    expect(parseNumber('1500')).toBe(1500)
+    expect(parseNumber('1234.5')).toBe(1234.5)
+    expect(parseNumber('0.5')).toBe(0.5)
+    expect(parseNumber('.5')).toBe(0.5)
+  })
+
+  it('rejects commas that are not thousands separators instead of dropping them', () => {
+    // these used to come out as 15, 2300 and 1000
+    expect(parseNumber('1,5')).toBeUndefined()
+    expect(parseNumber('23,00')).toBeUndefined()
+    expect(parseNumber('1,,000')).toBeUndefined()
+
+    const malformed = [',100', '100,', '1,0000', '1234,567', '0,500', '1,234,56', '1.234,5', '1,000.000,5', '1, 000']
+    for (const text of malformed) {
+      expect(parseNumber(text), text).toBeUndefined()
+    }
   })
 
   it('rejects anything that is not a plain number', () => {
@@ -31,6 +52,9 @@ describe('parseNumber', () => {
     expect(parseNumber('abc')).toBeUndefined()
     expect(parseNumber('1.2.3')).toBeUndefined()
     expect(parseNumber('12e3')).toBeUndefined()
+    expect(parseNumber('-')).toBeUndefined()
+    expect(parseNumber('.')).toBeUndefined()
+    expect(parseNumber('1.')).toBeUndefined()
   })
 })
 
