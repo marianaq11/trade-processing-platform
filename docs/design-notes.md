@@ -152,6 +152,11 @@ Found by poking at the API with curl:
   `NUMERIC(19,4)` notional column.
 - Page numbers and page sizes are bounded; sorting only accepts a few named columns.
 
+The forms are just as strict. `1,500` is fine, but `1,5` or `1,,000` is an error instead of a
+guess, and so is a price or limit with too many decimal places. Risk limits stop at
+9,999,999,999,999.99: that's 15 significant digits, the most a JavaScript number holds exactly,
+so a limit can't drift by a cent between the form and the database.
+
 ## Demo data
 
 `db/demo/R__demo_data.sql` inserts a few days of trade history and some limit changes, relative
@@ -174,3 +179,5 @@ cookie and a CSRF cookie. The backend image skips tests because they need Docker
 - Processing is synchronous. A background worker with retries would be the next step if the
   checks ever called slow external systems.
 - Not deployed. Running behind HTTPS would also mean marking the session cookie `Secure`.
+- Amounts in API responses are JSON numbers. A trade notional above $100 billion has more than
+  15 significant digits, so the UI can show it a cent off. The stored value is unaffected.

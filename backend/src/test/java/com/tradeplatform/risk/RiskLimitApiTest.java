@@ -9,6 +9,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -179,9 +180,32 @@ class RiskLimitApiTest extends IntegrationTest {
         updateLimits("ACC-1001", "-5", "1000000.123", "150", "", 0L)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.maxTradeNotional").value("Must be greater than 0"))
-                .andExpect(jsonPath("$.errors.maxDailyNotional").value("Use at most 15 digits and 2 decimal places"))
+                .andExpect(jsonPath("$.errors.maxDailyNotional").value("Use at most 13 digits and 2 decimal places"))
                 .andExpect(jsonPath("$.errors.priceTolerancePct").value("Can't be more than 100%"))
                 .andExpect(jsonPath("$.errors.reason").value("Give a reason for the change"));
+
+        assertThat(auditRowCount()).isZero();
+    }
+
+    @Test
+    void largestAllowedLimitIsStoredAndReturnedExactly() throws Exception {
+        updateLimits("ACC-1001", "9999999999999.99", "9999999999999.99", "10", "Upper bound", 0L)
+                .andExpect(status().isOk());
+
+        BigDecimal stored = jdbcTemplate.queryForObject("""
+                SELECT r.max_daily_notional FROM risk_limit r JOIN account a ON a.id = r.account_id
+                WHERE a.code = 'ACC-1001'""", BigDecimal.class);
+        assertThat(stored).isEqualByComparingTo("9999999999999.99");
+        mockMvc.perform(get("/api/risk-limits").with(RISK_USER))
+                .andExpect(content().string(containsString("\"maxDailyNotional\":9999999999999.99,")));
+    }
+
+    @Test
+    void limitsAboveFifteenSignificantDigitsAreRejected() throws Exception {
+        // From the review: as a JavaScript number this comes back as 99999999999999.98.
+        updateLimits("ACC-1001", "1000000", "99999999999999.99", "10", "test", 0L)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.maxDailyNotional").value("Use at most 13 digits and 2 decimal places"));
 
         assertThat(auditRowCount()).isZero();
     }

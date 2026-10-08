@@ -10,15 +10,18 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 // version is the one the client loaded; null when the account has no limits yet.
+// Notional limits stop at 13 digits plus 2 decimals (just under 10 trillion). That's 15
+// significant digits, the most a JavaScript number holds exactly, so the UI can't round a
+// limit while showing or sending it. The column itself (NUMERIC(19,2)) has room to spare.
 public record UpdateRiskLimitsRequest(
         @NotNull(message = "Required")
         @DecimalMin(value = "0.01", message = "Must be greater than 0")
-        @Digits(integer = 15, fraction = 2, message = "Use at most 15 digits and 2 decimal places")
+        @Digits(integer = 13, fraction = 2, message = "Use at most 13 digits and 2 decimal places")
         BigDecimal maxTradeNotional,
 
         @NotNull(message = "Required")
         @DecimalMin(value = "0.01", message = "Must be greater than 0")
-        @Digits(integer = 15, fraction = 2, message = "Use at most 15 digits and 2 decimal places")
+        @Digits(integer = 13, fraction = 2, message = "Use at most 13 digits and 2 decimal places")
         BigDecimal maxDailyNotional,
 
         @NotNull(message = "Required")

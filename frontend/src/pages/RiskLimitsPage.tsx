@@ -7,7 +7,14 @@ import Dialog from '../components/Dialog.tsx'
 import { Banner, ErrorBanner, LoadingRows } from '../components/Feedback.tsx'
 import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
-import { formatDateTime, formatMoney, formatPercent, parseNumber } from '../format.ts'
+import {
+  decimalPlaces,
+  formatDateTime,
+  formatMoney,
+  formatPercent,
+  invalidNumberMessage,
+  parseNumber,
+} from '../format.ts'
 import { riskFieldLabels } from '../labels.ts'
 
 export default function RiskLimitsPage() {
@@ -153,14 +160,30 @@ function Usage({ used, limit }: { used: number; limit: number | null }) {
   )
 }
 
-const FIELDS: { field: RiskLimitField; key: 'maxTradeNotional' | 'maxDailyNotional' | 'priceTolerancePct' }[] = [
+type LimitKey = 'maxTradeNotional' | 'maxDailyNotional' | 'priceTolerancePct'
+
+const FIELDS: { field: RiskLimitField; key: LimitKey }[] = [
   { field: 'MAX_TRADE_NOTIONAL', key: 'maxTradeNotional' },
   { field: 'MAX_DAILY_NOTIONAL', key: 'maxDailyNotional' },
   { field: 'PRICE_TOLERANCE_PCT', key: 'priceTolerancePct' },
 ]
 
+// Same cap as UpdateRiskLimitsRequest. 13 digits plus 2 decimals is as much as a JavaScript
+// number holds exactly, so a limit can't change on its way to the server and back.
+const MAX_NOTIONAL = 9_999_999_999_999.99
+
 const formatLimit = (field: RiskLimitField, value: number) =>
   field === 'PRICE_TOLERANCE_PCT' ? formatPercent(value) : formatMoney(value)
+
+// Decimals are checked before anything is formatted, so 1,000.555 is an error rather than 1,000.56.
+function limitError(key: LimitKey, text: string): string | undefined {
+  const value = parseNumber(text)
+  if (value === undefined) return text.trim() ? invalidNumberMessage(text) : 'Required'
+  if (decimalPlaces(text) > 2) return 'Use at most 2 decimal places'
+  if (value <= 0) return 'Must be greater than 0'
+  if (key === 'priceTolerancePct') return value > 100 ? "Can't be more than 100%" : undefined
+  return value > MAX_NOTIONAL ? `Can't be more than ${formatMoney(MAX_NOTIONAL)}` : undefined
+}
 
 interface EditProps {
   limit: RiskLimit
@@ -183,16 +206,18 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
   const [saving, setSaving] = useState(false)
 
   const changes = FIELDS.flatMap(({ field, key }) => {
-    const next = parseNumber(values[key])
+    if (limitError(key, values[key])) return []
+    const next = parseNumber(values[key])!
     const current = limit[key]
-    return next !== undefined && next !== current ? [{ field, from: current, to: next }] : []
+    return next !== current ? [{ field, from: current, to: next }] : []
   })
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const errors: Record<string, string> = {}
     for (const { key } of FIELDS) {
-      if (parseNumber(values[key]) === undefined) errors[key] = values[key].trim() ? 'Enter a number' : 'Required'
+      const message = limitError(key, values[key])
+      if (message) errors[key] = message
     }
     if (!reason.trim()) errors.reason = 'Give a reason for the change'
     setFieldErrors(errors)
@@ -224,7 +249,7 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
     }
   }
 
-  function input(key: string, label: string, suffix: string) {
+  function input(key: LimitKey, label: string, suffix: string) {
     return (
       <Field id={key} label={label} error={fieldErrors[key]}>
         <div className="input-with-suffix">
@@ -239,8 +264,9 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
               setFieldErrors({ ...fieldErrors, [key]: '' })
             }}
             onBlur={() => {
-              const n = parseNumber(values[key])
-              if (n !== undefined && suffix === 'USD') setValues({ ...values, [key]: formatMoney(n) })
+              if (suffix === 'USD' && !limitError(key, values[key])) {
+                setValues({ ...values, [key]: formatMoney(parseNumber(values[key])!) })
+              }
             }}
             aria-invalid={!!fieldErrors[key]}
             aria-describedby={messageId(key)}
