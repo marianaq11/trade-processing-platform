@@ -6,7 +6,7 @@ const quantityFormat = new Intl.NumberFormat('en-US')
 
 // Intl formats decimal text exactly, without going through a JS number first.
 export const formatMoney = (value: number | Decimal) => moneyFormat.format(value)
-export const formatPrice = (value: number) => priceFormat.format(value)
+export const formatPrice = (value: number | Decimal) => priceFormat.format(value)
 export const formatQuantity = (value: number) => quantityFormat.format(value)
 export const formatPercent = (value: number | Decimal) => `${moneyFormat.format(value)}%`
 
@@ -93,6 +93,17 @@ export function compareDecimals(a: Decimal, b: Decimal): number {
   const places = Math.max(decimalPlaces(a), decimalPlaces(b))
   const diff = scaled(a, places) - scaled(b, places)
   return diff === 0n ? 0 : diff > 0n ? 1 : -1
+}
+
+// Exact product, keeping every digit: 9999999 x 9999999.99 is 99999989900000.01, but as JS
+// numbers it comes out as 99999989900000.015625.
+export function multiplyDecimals(a: Decimal, b: Decimal): Decimal {
+  const places = decimalPlaces(a) + decimalPlaces(b)
+  const product = scaled(a, decimalPlaces(a)) * scaled(b, decimalPlaces(b))
+  const digits = (product < 0n ? -product : product).toString().padStart(places + 1, '0')
+  const sign = product < 0n ? '-' : ''
+  const whole = digits.slice(0, digits.length - places)
+  return (places === 0 ? `${sign}${whole}` : `${sign}${whole}.${digits.slice(-places)}`) as Decimal
 }
 
 // "-12.5" with 2 places -> -1250n

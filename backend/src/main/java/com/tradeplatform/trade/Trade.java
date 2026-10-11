@@ -89,7 +89,9 @@ public class Trade {
         this.side = side;
         this.quantity = quantity;
         this.price = price;
-        this.notional = price.multiply(BigDecimal.valueOf(quantity));
+        // Same scale as the NUMERIC(19,4) column, so a new trade's response matches what's read back
+        // later. Never rounds: prices have at most 4 decimal places.
+        this.notional = price.multiply(BigDecimal.valueOf(quantity)).setScale(4);
         this.tradeDate = tradeDate;
         this.settlementDate = settlementDate;
         this.submittedBy = submittedBy;

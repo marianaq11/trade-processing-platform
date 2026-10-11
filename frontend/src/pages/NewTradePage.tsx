@@ -1,25 +1,29 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ApiError, errorMessage, request } from '../api/client.ts'
-import type { Account, Instrument, Side, SubmitTradeRequest, Trade } from '../api/types.ts'
+import type { Account, Decimal, Instrument, Side, SubmitTradeRequest, Trade } from '../api/types.ts'
 import { useApi } from '../api/useApi.ts'
 import { Banner, EmptyState, ErrorBanner } from '../components/Feedback.tsx'
 import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import StatusBadge, { SideLabel } from '../components/StatusBadge.tsx'
 import {
+  compareDecimals,
+  decimalPlaces,
   formatMoney,
   formatPrice,
   formatQuantity,
   formatTradeId,
+  multiplyDecimals,
   nextBusinessDay,
+  parseDecimal,
   parseNumber,
   todayInNewYork,
 } from '../format.ts'
 import { rejectionLabels, statusLabels } from '../labels.ts'
 
 const MAX_QUANTITY = 10_000_000
-const MAX_PRICE = 9_999_999.9999
+const MAX_PRICE: Decimal = '9999999.9999'
 
 interface Outcome {
   trade: Trade
@@ -52,7 +56,8 @@ export default function NewTradePage() {
   // Checked on the text: as a JS number, "1.0000000000000001" is exactly 1.
   const wholeQuantity = quantity !== undefined && !/\.\d*[1-9]/.test(quantityText)
   const price = parseNumber(priceText)
-  const notional = quantity && price ? quantity * price : undefined
+  // Price is checked as typed, so ".5" is fine and "1.00001" isn't quietly rounded.
+  const exactPrice = parseDecimal(priceText)
   const deviationPct =
     instrument && price ? ((price - instrument.referencePrice) / instrument.referencePrice) * 100 : undefined
   const today = todayInNewYork()
@@ -78,12 +83,19 @@ export default function NewTradePage() {
     if (quantity === undefined) errors.quantity = quantityText.trim() ? 'Enter a number' : 'Enter a quantity'
     else if (!wholeQuantity || quantity <= 0) errors.quantity = 'Must be a whole number of shares'
     else if (quantity > MAX_QUANTITY) errors.quantity = `Can't be more than ${formatQuantity(MAX_QUANTITY)}`
-    if (price === undefined) errors.price = priceText.trim() ? 'Enter a number' : 'Enter a price'
-    else if (price <= 0) errors.price = 'Must be greater than 0'
-    else if (price > MAX_PRICE) errors.price = `Can't be more than ${formatPrice(MAX_PRICE)}`
-    else if (!/^\d+(\.\d{1,4})?$/.test(priceText.replace(/,/g, '').trim())) errors.price = 'Use at most 4 decimal places'
+    if (exactPrice === undefined) errors.price = priceText.trim() ? 'Enter a number' : 'Enter a price'
+    else if (compareDecimals(exactPrice, '0') <= 0) errors.price = 'Must be greater than 0'
+    else if (compareDecimals(exactPrice, MAX_PRICE) > 0) errors.price = `Can't be more than ${formatPrice(MAX_PRICE)}`
+    else if (decimalPlaces(exactPrice) > 4) errors.price = 'Use at most 4 decimal places'
     return errors
   }
+
+  // Only for a valid quantity and price, and worked out from the text: as JS numbers,
+  // 9,999,999 x 9,999,999.99 comes out a cent high.
+  const { quantity: quantityError, price: priceError } = validate()
+  const exactQuantity = parseDecimal(quantityText)
+  const notional =
+    exactQuantity && exactPrice && !quantityError && !priceError ? multiplyDecimals(exactQuantity, exactPrice) : undefined
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

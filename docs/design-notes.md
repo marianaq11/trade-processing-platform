@@ -154,13 +154,19 @@ Found by poking at the API with curl:
 
 ## Numbers in the UI
 
-- Number fields accept plain numbers (`1500.25`) and US thousands grouping (`1,500.25`). Any
-  other comma, as in `1,5` or `1,,000`, is an error. Dropping it would change the value.
+- Number fields accept plain numbers (`1500.25`, `.5`) and US thousands grouping (`1,500.25`).
+  Any other comma, as in `1,5` or `1,,000`, is an error. Dropping it would change the value.
 - Risk limit amounts, usage and audit log values are sent as JSON strings (`"99999999999999.99"`).
   Limits allow 15 integer digits and 2 decimal places, more than a JS number holds exactly, so the
   browser would round them as JSON numbers. `PUT /api/risk-limits/{account}` accepts strings or
   numbers, and the backend still uses `BigDecimal`. More than 2 decimal places is rejected, not
   rounded.
+- Trade notionals are sent as strings too, always with 4 decimal places (`"99999989900000.0100"`).
+  As a JSON number that one reads as ...900,000.02. The new trade form works out its notional
+  preview from the typed quantity and price with `BigInt`, not by multiplying JS numbers.
+- The risk limit editor checks the backend's ranges before saving, comparing amounts as decimals:
+  notional limits from 0.01 to 999,999,999,999,999.99, tolerance from 0.01 to 100%, and the
+  per-trade limit no higher than the daily one. The backend still checks all of these.
 
 ## Demo data
 

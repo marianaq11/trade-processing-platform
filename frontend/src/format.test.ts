@@ -5,6 +5,7 @@ import {
   formatDateTime,
   formatMoney,
   formatTradeId,
+  multiplyDecimals,
   nextBusinessDay,
   parseDecimal,
   parseNumber,
@@ -71,6 +72,7 @@ describe('parseDecimal', () => {
   it('keeps every digit the user typed', () => {
     expect(parseDecimal('99,999,999,999,999.99')).toBe('99999999999999.99')
     expect(parseDecimal(' 1000.129 ')).toBe('1000.129')
+    expect(parseDecimal('.5')).toBe('.5')
     expect(parseDecimal('1,5')).toBeUndefined()
   })
 })
@@ -97,6 +99,23 @@ describe('compareDecimals', () => {
   })
 })
 
+describe('multiplyDecimals', () => {
+  it('keeps the cent that multiplying JS numbers loses', () => {
+    expect(9999999 * 9999999.99).toBe(99999989900000.02)
+    expect(multiplyDecimals('9999999', '9999999.99')).toBe('99999989900000.01')
+    expect(multiplyDecimals('10000000', '9999999.9999')).toBe('99999999999000.0000')
+  })
+
+  it('puts the decimal point and sign in the right place', () => {
+    expect(multiplyDecimals('100', '230')).toBe('23000')
+    expect(multiplyDecimals('1500', '.5')).toBe('750.0')
+    expect(multiplyDecimals('3', '0.0001')).toBe('0.0003')
+    expect(multiplyDecimals('0.05', '0.2')).toBe('0.010')
+    expect(multiplyDecimals('-1.5', '2')).toBe('-3.0')
+    expect(multiplyDecimals('-.5', '-0.5')).toBe('0.25')
+  })
+})
+
 describe('formatMoney', () => {
   it('formats decimal text without rounding it to a JS number first', () => {
     // what the limit used to show when the API sent it as a JSON number
@@ -104,6 +123,12 @@ describe('formatMoney', () => {
     expect(formatMoney('99999999999999.99')).toBe('99,999,999,999,999.99')
     // the largest limit the API accepts
     expect(formatMoney('999999999999999.99')).toBe('999,999,999,999,999.99')
+  })
+
+  it('shows a large trade notional to the cent', () => {
+    // what the trade pages showed when the API sent the notional as a JSON number
+    expect(formatMoney(JSON.parse('99999989900000.0100'))).toBe('99,999,989,900,000.02')
+    expect(formatMoney('99999989900000.0100')).toBe('99,999,989,900,000.01')
   })
 })
 

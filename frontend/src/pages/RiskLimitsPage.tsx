@@ -154,10 +154,13 @@ function Usage({ used, limit }: { used: Decimal; limit: Decimal | null }) {
   )
 }
 
-const FIELDS: { field: RiskLimitField; key: 'maxTradeNotional' | 'maxDailyNotional' | 'priceTolerancePct' }[] = [
-  { field: 'MAX_TRADE_NOTIONAL', key: 'maxTradeNotional' },
-  { field: 'MAX_DAILY_NOTIONAL', key: 'maxDailyNotional' },
-  { field: 'PRICE_TOLERANCE_PCT', key: 'priceTolerancePct' },
+type LimitKey = 'maxTradeNotional' | 'maxDailyNotional' | 'priceTolerancePct'
+
+// Same ranges as the backend. Amounts have at most 2 decimal places, so "greater than 0" means 0.01.
+const FIELDS: { field: RiskLimitField; key: LimitKey; max: Decimal }[] = [
+  { field: 'MAX_TRADE_NOTIONAL', key: 'maxTradeNotional', max: '999999999999999.99' },
+  { field: 'MAX_DAILY_NOTIONAL', key: 'maxDailyNotional', max: '999999999999999.99' },
+  { field: 'PRICE_TOLERANCE_PCT', key: 'priceTolerancePct', max: '100' },
 ]
 
 const formatLimit = (field: RiskLimitField, value: Decimal) =>
@@ -168,6 +171,25 @@ const formatLimit = (field: RiskLimitField, value: Decimal) =>
 function parseLimit(text: string): Decimal | undefined {
   const value = parseDecimal(text)
   return value !== undefined && decimalPlaces(value) <= 2 ? value : undefined
+}
+
+// Compared as decimals: as JS numbers, 999999999999999.99 and 1000000000000000 are the same.
+function validateLimits(values: Record<string, string>): Record<string, string> {
+  const errors: Record<string, string> = {}
+  const valid: Partial<Record<LimitKey, Decimal>> = {}
+  for (const { field, key, max } of FIELDS) {
+    const value = parseDecimal(values[key])
+    if (value === undefined) errors[key] = values[key].trim() ? 'Enter a number' : 'Required'
+    else if (decimalPlaces(value) > 2) errors[key] = 'Use at most 2 decimal places'
+    else if (compareDecimals(value, '0') <= 0) errors[key] = 'Must be greater than 0'
+    else if (compareDecimals(value, max) > 0) errors[key] = `Can't be more than ${formatLimit(field, max)}`
+    else valid[key] = value
+  }
+  const { maxTradeNotional, maxDailyNotional } = valid
+  if (maxTradeNotional && maxDailyNotional && compareDecimals(maxTradeNotional, maxDailyNotional) > 0) {
+    errors.maxTradeNotional = "Can't be more than the daily limit"
+  }
+  return errors
 }
 
 interface EditProps {
@@ -190,22 +212,19 @@ function EditLimitsDialog({ limit, onClose, onSaved, onStale }: EditProps) {
   const [stale, setStale] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // A value that won't pass validation isn't shown as a change.
+  const invalid = validateLimits(values)
   const changes = FIELDS.flatMap(({ field, key }) => {
     const next = parseLimit(values[key])
     const current = limit[key]
-    return next !== undefined && (current === null || compareDecimals(next, current) !== 0)
+    return next !== undefined && !invalid[key] && (current === null || compareDecimals(next, current) !== 0)
       ? [{ field, from: current, to: next }]
       : []
   })
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const errors: Record<string, string> = {}
-    for (const { key } of FIELDS) {
-      const value = parseDecimal(values[key])
-      if (value === undefined) errors[key] = values[key].trim() ? 'Enter a number' : 'Required'
-      else if (decimalPlaces(value) > 2) errors[key] = 'Use at most 2 decimal places'
-    }
+    const errors = validateLimits(values)
     if (!reason.trim()) errors.reason = 'Give a reason for the change'
     setFieldErrors(errors)
     setError(undefined)

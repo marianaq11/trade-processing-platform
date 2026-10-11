@@ -138,7 +138,7 @@ class EntitlementTest extends IntegrationTest {
                 .andExpect(jsonPath("$.id").value(Matchers.not(999)))
                 .andExpect(jsonPath("$.submittedBy").value("trader1"))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"))
-                .andExpect(jsonPath("$.notional").value(23000.0))
+                .andExpect(jsonPath("$.notional").value("23000.0000"))
                 .andExpect(jsonPath("$.tradeDate").value("2026-10-05"))
                 .andExpect(jsonPath("$.settlementDate").value("2026-10-06"));
     }

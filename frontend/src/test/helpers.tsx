@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
-import type { CurrentUser, Role } from '../api/types.ts'
+import type { CurrentUser, Role, Trade } from '../api/types.ts'
 import { AuthContext } from '../auth/AuthContext.tsx'
 
 export const json = (body: unknown, status = 200) =>
@@ -33,3 +33,27 @@ export function renderAs(user: CurrentUser, ui: ReactNode, path = '/') {
 }
 
 export const emptyPage = { content: [], page: 0, size: 25, totalElements: 0, totalPages: 0 }
+
+export function trade(overrides: Partial<Trade> = {}): Trade {
+  return {
+    id: 42,
+    clientTradeId: 'x',
+    accountCode: 'ACC-1001',
+    accountName: 'Harbor Growth Fund',
+    symbol: 'AAPL',
+    instrumentName: 'Apple Inc.',
+    side: 'BUY',
+    quantity: 100,
+    price: 230,
+    notional: '23000.0000',
+    tradeDate: '2026-10-05',
+    settlementDate: '2026-10-06',
+    status: 'ACCEPTED',
+    rejectionReason: null,
+    rejectionDetail: null,
+    submittedBy: 'trader',
+    createdAt: '2026-10-05T14:00:00Z',
+    updatedAt: '2026-10-05T14:00:00Z',
+    ...overrides,
+  }
+}
