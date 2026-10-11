@@ -84,8 +84,8 @@ describe('new trade form', () => {
     await fillIn(user)
 
     await submit(user)
-    expect(await screen.findByText('Failed to fetch')).toBeInTheDocument()
-    await submit(user)
+    expect(await screen.findByText('Last attempt: Failed to fetch')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Retry this trade' }))
 
     expect(await screen.findByRole('heading', { name: 'Trade accepted' })).toBeInTheDocument()
     expect(submitted).toHaveLength(2)
