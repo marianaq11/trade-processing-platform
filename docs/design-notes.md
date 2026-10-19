@@ -183,10 +183,28 @@ origin, the same as with the Vite dev server's proxy. That matters because login
 cookie and a CSRF cookie. The backend image skips tests because they need Docker themselves
 (Testcontainers); CI runs them.
 
+Compose is only meant for a developer's machine. The database password defaults to a known
+value and the demo users share a published password, so ports are published on `127.0.0.1`
+only. CI also builds the images and starts the full stack under a throwaway Compose project, so
+every run gets a fresh database. It checks that all Flyway migrations ran, the backend is
+healthy, and a demo user can log in through nginx.
+
+## Kubernetes (kind)
+
+`k8s/` has manifests for the same three containers on a local kind cluster, with locally built
+images loaded straight into the cluster (no registry or cloud account). The database password
+goes into a Kubernetes Secret created by hand, and the frontend is reached with
+`kubectl port-forward`. There's one backend replica, because sessions live in the backend's
+memory, and Postgres stores its data on a volume inside the cluster. `k8s/README.md` has the
+steps.
+
 ## Not done
 
 - No market holiday calendar.
 - No login rate limiting, password changes or user management; users come from a migration.
 - Processing is synchronous. A background worker with retries would be the next step if the
   checks ever called slow external systems.
-- Not deployed. Running behind HTTPS would also mean marking the session cookie `Secure`.
+- No public deployment. It runs locally with Docker Compose or on a kind cluster, both over
+  plain HTTP with demo credentials. Running behind HTTPS would also mean marking the session
+  cookie `Secure`.
+- One backend replica. Running more would need shared session storage.

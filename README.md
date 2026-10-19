@@ -5,7 +5,15 @@ checked against the trader's account entitlements and the account's risk limits,
 or rejected with a reason, and settled one business day later (T+1). Every step is recorded, so
 you can always see what happened to a trade, who did it and why.
 
-![Trades page](docs/screenshots/trades.png)
+This is a student portfolio project that simulates post-trade processing. It isn't a trading app
+(there's no market data or order matching) and it isn't connected to a real clearing or settlement
+system: settling a trade here only updates its status in the database. What I wanted to model is
+the checks that happen between booking a trade and settling it. A trade on the wrong account, a
+mistyped price or an account going over its daily limit should be caught before it settles, and
+when something does go wrong, there should be a record of what happened to each trade and who
+changed which limit.
+
+![Trades page: accepted, settled, rejected and cancelled trades, with rejection reasons](docs/screenshots/trades.png)
 
 ## Features
 
@@ -22,15 +30,18 @@ you can always see what happened to a trade, who did it and why.
 - **Role-based access**: traders, operations and risk managers each get their own pages and
   actions, enforced by the backend.
 
-| Trade detail | New trade | Risk limits |
+| New trade (trader) | Accepted, waiting for T+1 | Rejected: over daily limit |
 |---|---|---|
-| ![Trade detail](docs/screenshots/trade-detail.png) | ![New trade](docs/screenshots/new-trade.png) | ![Risk limits](docs/screenshots/risk-limits.png) |
+| ![New trade form](docs/screenshots/new-trade.png) | ![Accepted trade and its lifecycle](docs/screenshots/trade-accepted.png) | ![Trade rejected for going over the daily limit](docs/screenshots/trade-detail.png) |
+| **Settlement (operations)** | **Risk limits (risk manager)** | **Audit log** |
+| ![Settlement page](docs/screenshots/settlement.png) | ![Risk limits page](docs/screenshots/risk-limits.png) | ![Audit log of risk limit changes](docs/screenshots/audit-log.png) |
 
 ## Tech stack
 
-Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway, React 19 with
-TypeScript and Vite, JUnit 5 with Testcontainers, Vitest, Docker Compose, Kubernetes (kind),
-GitHub Actions.
+- **Backend**: Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway
+- **Frontend**: React 19, TypeScript, Vite, served by nginx in the Docker image
+- **Tests**: JUnit 5 with Testcontainers, Vitest
+- **Running it**: Docker Compose, Kubernetes on a local kind cluster, GitHub Actions for CI
 
 ## Running locally
 
@@ -143,10 +154,21 @@ npm.cmd run typecheck
 ```
 
 On macOS/Linux use `./mvnw test` and `npm test`. The backend tests start a real Postgres in Docker
-(Testcontainers), so Docker needs to be running. GitHub Actions runs both suites, the frontend
-lint/type-check/build, and the Docker image builds on every push.
+(Testcontainers), so Docker needs to be running.
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs on pushes to `main` and on pull
+requests, in three jobs:
+
+- **Backend**: compiles and runs all the tests with `./mvnw verify`.
+- **Frontend**: lint, type-check, tests and a production build.
+- **Docker Compose smoke test**: builds the images and starts the whole stack on a fresh database,
+  then checks that every Flyway migration ran, the backend reports healthy, nginx serves the app,
+  and a demo user can log in through the `/api` proxy.
 
 ## Implementation notes
+
+The parts that took the most thought. Several are about two requests or jobs hitting the same
+data at the same time.
 
 **Concurrent daily limit checks.** Two trades for the same account arriving together could both
 read the same "used today" total and both pass. The risk check locks the account's limit row
@@ -160,6 +182,11 @@ Sending the same one again returns the original trade. If two identical requests
 **Settlement can run twice.** Each trade settles in its own transaction, its status is re-checked
 inside it, and `@Version` on the trade catches a cancel and a settle racing each other. A test
 runs three settlement jobs at the same time and checks every trade settled exactly once.
+
+**Money is never a floating-point number.** Prices, notionals and limits are `BigDecimal` in Java
+and `NUMERIC` in Postgres, and the API sends them as JSON strings, because the largest allowed
+limit has more digits than a JavaScript number holds exactly. The new trade form calculates its
+notional preview with `BigInt` instead of multiplying JS numbers.
 
 **Entitlements are checked first.** This happens before the duplicate lookup, so resubmitting an
 existing trade can't get around it. An account code that doesn't exist gets the same 403 as one
