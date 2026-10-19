@@ -43,9 +43,70 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Checks that the docker compose images still build.
+  # Build and boot the full stack against a disposable database.
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Compose scopes pgdata to this run; never use the local development volume.
+      COMPOSE_PROJECT_NAME: ci-smoke-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
       - run: docker compose build
+      - name: Start stack and wait for health checks
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Verify Flyway migrations and backend health
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose exec -T postgres psql -U trades -d trades -v ON_ERROR_STOP=1 \
+            -c 'SELECT installed_rank, script, success FROM flyway_schema_history ORDER BY installed_rank;'
+          expected=$(find backend/src/main/resources/db/migration backend/src/main/resources/db/demo -name '*.sql' | wc -l)
+          actual=$(docker compose exec -T postgres psql -U trades -d trades -v ON_ERROR_STOP=1 -At \
+            -c 'SELECT count(*), bool_and(success) FROM flyway_schema_history;')
+          test "$actual" = "$expected|t"
+          docker compose exec -T backend curl --fail --silent --show-error --max-time 10 \
+            http://localhost:8080/actuator/health | jq -e '.status == "UP"'
+
+      - name: Verify nginx and session login through the API proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=http://localhost:3000
+          cookies=$(mktemp)
+          html=$(mktemp)
+          trap 'rm -f "$cookies" "$html"' EXIT
+
+          # nginx has no health check, so allow a short bounded startup retry.
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 \
+            --max-time 10 --retry-max-time 30 "$base/" -o "$html"
+          grep -qi '<!doctype html>' "$html"
+          grep -q '<div id="root"></div>' "$html"
+
+          # Match the SPA: the anonymous /me response supplies the CSRF cookie.
+          status=$(curl --silent --show-error --max-time 10 -c "$cookies" \
+            -o /dev/null -w '%{http_code}' "$base/api/auth/me")
+          test "$status" = 401
+          csrf=$(awk '$6 == "XSRF-TOKEN" {print $7}' "$cookies")
+          test -n "$csrf"
+          status=$(curl --silent --show-error --max-time 10 -b "$cookies" -c "$cookies" \
+            -H "X-XSRF-TOKEN: $csrf" --data-urlencode 'username=trader1' \
+            --data-urlencode 'password=demo-pass' -o /dev/null -w '%{http_code}' \
+            "$base/api/auth/login")
+          test "$status" = 204
+
+          curl --fail --silent --show-error --max-time 10 -b "$cookies" "$base/api/auth/me" \
+            | jq -e '.username == "trader1" and .role == "TRADER"'
+          curl --fail --silent --show-error --max-time 10 -b "$cookies" "$base/api/accounts" \
+            | jq -e 'type == "array" and any(.[]; .code == "ACC-1001")'
+
+      - name: Print container status and logs on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --timestamps
+
+      - name: Remove disposable CI stack and volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans
