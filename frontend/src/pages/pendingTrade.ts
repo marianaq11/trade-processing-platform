@@ -24,7 +24,10 @@ export function savePendingTrade(username: string, trade: SubmitTradeRequest) {
   }
 }
 
-export function clearPendingTrade(username: string) {
+// Only clears the saved trade if it's the one being resolved. A response can arrive long after
+// the page that sent it was left, by which time a newer trade may be the one saved here.
+export function clearPendingTrade(username: string, clientTradeId: string) {
+  if (loadPendingTrade(username)?.clientTradeId !== clientTradeId) return
   try {
     sessionStorage.removeItem(storageKey(username))
   } catch {
