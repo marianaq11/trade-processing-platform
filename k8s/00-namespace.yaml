@@ -1,0 +1,6 @@
+# Everything for the local kind deployment lives in this namespace, so one command removes it
+# all, including the database volume:  kubectl delete namespace trade-platform
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trade-platform

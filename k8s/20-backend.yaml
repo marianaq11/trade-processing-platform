@@ -1,0 +1,91 @@
+# The Spring Boot backend, built locally and loaded into kind (see k8s/README.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: trade-platform
+spec:
+  # One replica on purpose: logins are in-memory Spring Security sessions, so a second pod
+  # wouldn't recognize sessions created on the first.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      enableServiceLinks: false
+      # Wait for the database first. Otherwise Spring Boot fails, exits and is restarted with a
+      # growing back-off while Postgres is still pulling its image or running initdb.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:17-alpine
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432 -U trades; do sleep 2; done"]
+      containers:
+        - name: backend
+          image: trade-platform-backend:local
+          # Never pull: the image only exists locally. A missing image shows as ErrImageNeverPull.
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            # "postgres" is the Service in 10-postgres.yaml, found through cluster DNS.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/trades
+            - name: SPRING_DATASOURCE_USERNAME
+              value: trades
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            # The JVM sizes its heap from the container memory limit; the default is only 25%.
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=50
+          # SecurityConfig only lets /actuator/health through without a login, so the probes use it
+          # rather than /actuator/health/liveness and /readiness, which would answer 401.
+          #
+          # Flyway migrates before the web server starts, so allow up to 3 minutes on first boot.
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          # /actuator/health includes the database: if Postgres goes away the pod stops getting
+          # traffic until it's back, but isn't restarted for it.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # Restart only if the server stops accepting connections.
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            # No CPU limit, so startup isn't throttled.
+            limits:
+              memory: 1Gi
+---
+# The name matters: frontend/nginx.conf proxies /api/ to http://backend:8080, the same hostname
+# Docker Compose uses, so the frontend image works unchanged in both.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: trade-platform
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8080
+      targetPort: 8080
