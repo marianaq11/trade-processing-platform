@@ -45,6 +45,10 @@ docker compose up --build
 Then open http://localhost:3000. The first build takes a few minutes. Stop it with `Ctrl+C`, and
 use `docker compose down -v` if you want to start over with fresh demo data.
 
+Docker Compose is for local development only. It uses known demo credentials (the default
+database password and the demo users below), so it publishes ports on `127.0.0.1` only: the app
+(3000) and the database (5432) can't be reached from other machines on your network.
+
 ### Running the backend and frontend yourself
 
 Needs JDK 21, Node 22+ and Docker Desktop (for the database).

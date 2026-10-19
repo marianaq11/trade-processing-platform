@@ -2,7 +2,8 @@
 # docker compose up -d postgres    only the database, for running the backend and frontend yourself
 #
 # The database password is a local development default, not a secret. Set POSTGRES_PASSWORD in a
-# .env file (ignored by git) to use something else.
+# .env file (ignored by git) to use something else. Ports are only published on 127.0.0.1, so
+# other machines on the network can't reach the app or the database.
 
 services:
   postgres:
@@ -12,7 +13,7 @@ services:
       POSTGRES_USER: trades
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trades}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -39,7 +40,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       backend:
         condition: service_healthy
