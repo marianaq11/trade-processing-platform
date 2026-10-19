@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { ApiError, errorMessage, request } from '../api/client.ts'
 import type { Account, Decimal, Instrument, Side, SubmitTradeRequest, Trade } from '../api/types.ts'
 import { useApi } from '../api/useApi.ts'
+import { useCurrentUser } from '../auth/AuthContext.tsx'
 import { Banner, EmptyState, ErrorBanner } from '../components/Feedback.tsx'
 import Field, { messageId } from '../components/Field.tsx'
 import PageHeader from '../components/PageHeader.tsx'
@@ -21,6 +22,7 @@ import {
   todayInNewYork,
 } from '../format.ts'
 import { rejectionLabels, statusLabels } from '../labels.ts'
+import { clearPendingTrade, loadPendingTrade, savePendingTrade } from './pendingTrade.ts'
 
 const MAX_QUANTITY = 10_000_000
 const MAX_PRICE: Decimal = '9999999.9999'
@@ -30,9 +32,14 @@ interface Outcome {
   duplicate: boolean
 }
 
+// No response at all, or one that doesn't say whether the trade was saved: a gateway timeout
+// can come back after the backend has already booked it.
+const isUncertain = (err: unknown) => !(err instanceof ApiError) || err.status >= 500 || err.status === 408
+
 type Errors = Partial<Record<'accountCode' | 'symbol' | 'quantity' | 'price', string>>
 
 export default function NewTradePage() {
+  const { username } = useCurrentUser()
   const accounts = useApi<Account[]>('/api/accounts')
   const instruments = useApi<Instrument[]>('/api/instruments')
 
@@ -49,6 +56,9 @@ export default function NewTradePage() {
   const [error, setError] = useState<string>()
   const [fieldErrors, setFieldErrors] = useState<Errors>({})
   const [outcome, setOutcome] = useState<Outcome>()
+  // Sent but not confirmed. While this is set the form is locked, so a retry always sends
+  // exactly what was sent before, with the same clientTradeId.
+  const [pending, setPending] = useState(() => loadPendingTrade(username))
 
   const account = accounts.data?.find((a) => a.code === accountCode)
   const instrument = instruments.data?.find((i) => i.symbol === symbol)
@@ -104,17 +114,45 @@ export default function NewTradePage() {
     setFieldErrors(errors)
     if (Object.values(errors).some(Boolean)) return
 
-    const body: SubmitTradeRequest = { clientTradeId, accountCode, symbol, side, quantity: quantity!, price: price! }
+    send({ clientTradeId, accountCode, symbol, side, quantity: quantity!, price: price! }, false)
+  }
+
+  // Saved before sending, so leaving or refreshing the page mid-request still leaves a way to
+  // retry. Only a confirmed response clears it, or a refusal of a first attempt (nothing was
+  // booked then). After an unknown outcome, a later refusal doesn't tell us about the earlier attempt.
+  async function send(body: SubmitTradeRequest, retry: boolean) {
+    savePendingTrade(username, body)
+    setError(undefined)
     setSubmitting(true)
     try {
       const { data, status } = await request<Trade>('/api/trades', { method: 'POST', body: JSON.stringify(body) })
+      clearPendingTrade(username)
+      setPending(undefined)
       setOutcome({ trade: data, duplicate: status === 200 })
     } catch (err) {
       setError(errorMessage(err))
-      if (err instanceof ApiError) setFieldErrors(err.fieldErrors)
+      if (retry || isUncertain(err)) {
+        setPending(body)
+      } else {
+        clearPendingTrade(username)
+        if (err instanceof ApiError) setFieldErrors(err.fieldErrors)
+      }
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // The user has accepted that the unconfirmed trade may already be booked. Its details go back
+  // into the form, but with a new clientTradeId, since whatever is submitted next is a new trade.
+  function discardPending(trade: SubmitTradeRequest) {
+    clearPendingTrade(username)
+    setSide(trade.side)
+    setAccountCode(trade.accountCode)
+    setSymbol(trade.symbol)
+    setQuantityText(formatQuantity(trade.quantity))
+    setPriceText(formatPrice(trade.price))
+    startNewTrade(true)
+    setPending(undefined)
   }
 
   // A new clientTradeId either way: this is a new trade, not a retry of the last one.
@@ -142,6 +180,21 @@ export default function NewTradePage() {
       <>
         {header}
         <TradeOutcome outcome={outcome} onNewTrade={() => startNewTrade(false)} onAmend={() => startNewTrade(true)} />
+      </>
+    )
+  }
+
+  if (pending) {
+    return (
+      <>
+        {header}
+        <PendingTrade
+          trade={pending}
+          error={error}
+          retrying={submitting}
+          onRetry={() => send(pending, true)}
+          onDiscard={() => discardPending(pending)}
+        />
       </>
     )
   }
@@ -325,6 +378,66 @@ function PriceDeviation({ pct }: { pct: number }) {
   const text = rounded === 0 ? 'At the reference price' : `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toFixed(2)}% vs reference`
   // Tolerance is set per account (5-10% for the demo accounts), so this is only a heads-up.
   return <span className={Math.abs(pct) > 5 ? 'deviation is-far' : 'deviation'}>{text}</span>
+}
+
+interface PendingProps {
+  trade: SubmitTradeRequest
+  error?: string
+  retrying: boolean
+  onRetry: () => void
+  onDiscard: () => void
+}
+
+function PendingTrade({ trade, error, retrying, onRetry, onDiscard }: PendingProps) {
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+
+  return (
+    <section className="panel outcome outcome-pending" aria-live="polite">
+      <div className="outcome-header">
+        <h2>Not confirmed yet</h2>
+      </div>
+
+      <p className="outcome-text">
+        This trade was sent, but no confirmation came back, so it may or may not have been booked. Retrying sends it
+        again with the same client trade ID: if it was booked, you'll get the original back instead of a second trade.
+      </p>
+      {error && <ErrorBanner message={`Last attempt: ${error}`} />}
+
+      <p className="outcome-summary">
+        <SideLabel side={trade.side} /> {formatQuantity(trade.quantity)} {trade.symbol} @ {formatPrice(trade.price)} for{' '}
+        {trade.accountCode}. Client trade ID <code>{trade.clientTradeId.slice(0, 8)}</code>.
+      </p>
+
+      {confirmingDiscard ? (
+        <>
+          <Banner tone="warning">
+            If this trade was booked, anything you submit next is booked as a separate trade, even with the same
+            details. Check your trades first if you're not sure.
+          </Banner>
+          <div className="form-actions">
+            <button className="btn btn-danger" onClick={onDiscard}>
+              Discard and start a new trade
+            </button>
+            <button className="btn" onClick={() => setConfirmingDiscard(false)}>
+              Keep it
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={onRetry} disabled={retrying}>
+            {retrying ? 'Retrying...' : 'Retry this trade'}
+          </button>
+          <Link className="btn" to="/trades">
+            Check trades
+          </Link>
+          <button className="btn" onClick={() => setConfirmingDiscard(true)} disabled={retrying}>
+            Start a new trade instead
+          </button>
+        </div>
+      )}
+    </section>
+  )
 }
 
 interface OutcomeProps {

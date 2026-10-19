@@ -1286,6 +1286,14 @@ td .tag:first-child {
   border-left-color: var(--red);
 }
 
+.outcome-pending {
+  border-left-color: var(--amber);
+}
+
+.outcome-text {
+  margin: 0 0 12px;
+}
+
 .outcome-header {
   display: flex;
   align-items: center;
