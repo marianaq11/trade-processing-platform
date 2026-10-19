@@ -63,6 +63,9 @@ async function submitTrade(user: ReturnType<typeof userEvent.setup>, quantity = 
 const notConfirmed = () => screen.findByRole('heading', { name: 'Not confirmed yet' })
 const retry = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Retry this trade' }))
 
+// Lets a response that was just released be handled, by a page that may no longer be on screen.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 describe('recovering a trade whose outcome is unknown', () => {
   it('gets the original back when the server booked the trade but the response was lost', async () => {
     const user = userEvent.setup()
@@ -223,6 +226,65 @@ describe('recovering a trade whose outcome is unknown', () => {
     await submitTrade(user, '5')
     await screen.findByRole('heading', { name: 'Trade accepted' })
     expect(posts[1].clientTradeId).not.toBe(posts[0].clientTradeId)
+  })
+
+  it("doesn't let a late response for an earlier trade clear a newer unconfirmed trade", async () => {
+    const user = userEvent.setup()
+    let releaseFirstResponse = () => {}
+    const { booked, posts } = backend((book) => {
+      // trade A is booked, but its response is held back until the end of the test
+      if (posts.length === 1) {
+        const response = book()
+        return new Promise<Response>((resolve) => (releaseFirstResponse = () => resolve(response)))
+      }
+      // trade B is booked and its response is lost
+      if (posts.length === 3) return lostResponse(book)
+      return book()
+    })
+    let view = open()
+    await submitTrade(user)
+
+    // leave and come back while A is in flight, then retry it successfully
+    view = reopen(view)
+    await notConfirmed()
+    await retry(user)
+    await screen.findByText(/already been submitted, so nothing new was booked/)
+
+    await user.click(screen.getByRole('button', { name: 'New trade' }))
+    await submitTrade(user, '200')
+    await notConfirmed()
+
+    // A's original response finally arrives, at the page that sent it
+    releaseFirstResponse()
+    await settle()
+
+    reopen(view)
+    expect(await notConfirmed()).toBeInTheDocument()
+    expect(screen.getByText(/Client trade ID/)).toHaveTextContent(String(posts[2].clientTradeId).slice(0, 8))
+    await retry(user)
+    await screen.findByText(/already been submitted, so nothing new was booked/)
+    expect(posts[3]).toEqual(posts[2])
+    expect(booked.size).toBe(2)
+  })
+
+  it('still clears the unconfirmed trade when its own late response arrives', async () => {
+    const user = userEvent.setup()
+    let releaseResponse = () => {}
+    backend((book) => {
+      const response = book()
+      return new Promise<Response>((resolve) => (releaseResponse = () => resolve(response)))
+    })
+    let view = open()
+    await submitTrade(user)
+    view = reopen(view)
+    await notConfirmed()
+
+    releaseResponse()
+    await settle()
+
+    reopen(view)
+    expect(await screen.findByLabelText('Quantity (shares)')).toHaveValue('')
+    expect(screen.queryByRole('heading', { name: 'Not confirmed yet' })).not.toBeInTheDocument()
   })
 
   it("keeps one trader's unconfirmed trade away from another trader in the same tab", async () => {

@@ -126,7 +126,7 @@ export default function NewTradePage() {
     setSubmitting(true)
     try {
       const { data, status } = await request<Trade>('/api/trades', { method: 'POST', body: JSON.stringify(body) })
-      clearPendingTrade(username)
+      clearPendingTrade(username, body.clientTradeId)
       setPending(undefined)
       setOutcome({ trade: data, duplicate: status === 200 })
     } catch (err) {
@@ -134,7 +134,7 @@ export default function NewTradePage() {
       if (retry || isUncertain(err)) {
         setPending(body)
       } else {
-        clearPendingTrade(username)
+        clearPendingTrade(username, body.clientTradeId)
         if (err instanceof ApiError) setFieldErrors(err.fieldErrors)
       }
     } finally {
@@ -145,7 +145,7 @@ export default function NewTradePage() {
   // The user has accepted that the unconfirmed trade may already be booked. Its details go back
   // into the form, but with a new clientTradeId, since whatever is submitted next is a new trade.
   function discardPending(trade: SubmitTradeRequest) {
-    clearPendingTrade(username)
+    clearPendingTrade(username, trade.clientTradeId)
     setSide(trade.side)
     setAccountCode(trade.accountCode)
     setSymbol(trade.symbol)
