@@ -29,7 +29,8 @@ you can always see what happened to a trade, who did it and why.
 ## Tech stack
 
 Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway, React 19 with
-TypeScript and Vite, JUnit 5 with Testcontainers, Vitest, Docker Compose, GitHub Actions.
+TypeScript and Vite, JUnit 5 with Testcontainers, Vitest, Docker Compose, Kubernetes (kind),
+GitHub Actions.
 
 ## Running locally
 
@@ -77,6 +78,35 @@ cd frontend && npm install && npm run dev    # in a second terminal
 ```
 
 Open http://localhost:5173. Either way, the database starts with a few days of sample trades.
+
+### On local Kubernetes (kind)
+
+The same three containers can also run on a local [kind](https://kind.sigs.k8s.io/) cluster
+(Kubernetes inside Docker), using the manifests in [`k8s/`](k8s/). This is for your own machine
+only: no registry, no cloud, and not a production setup. It needs Docker Desktop, kubectl (Docker
+Desktop includes one) and kind (`winget install --id Kubernetes.kind -e`).
+
+```powershell
+docker build -t trade-platform-backend:local .\backend
+docker build -t trade-platform-frontend:local .\frontend
+kind create cluster --name trade-platform
+kind load docker-image trade-platform-backend:local trade-platform-frontend:local --name trade-platform
+kubectl apply -f k8s\00-namespace.yaml
+$pgPassword = [guid]::NewGuid().ToString("N")
+kubectl -n trade-platform create secret generic postgres-credentials --from-literal=password=$pgPassword
+kubectl apply -f k8s\
+kubectl -n trade-platform rollout status deployment/backend --timeout=300s
+kubectl -n trade-platform rollout status deployment/frontend --timeout=120s
+kubectl -n trade-platform port-forward service/frontend 3001:80
+```
+
+Then open http://localhost:3001. It uses port 3001 so it can run next to the Compose app on 3000.
+The database password is generated into a Kubernetes Secret and never written to a file.
+
+Limitations: there's one backend replica, because logins are sessions held in the backend's
+memory; the demo users have a known password; and the database lives inside the kind cluster, so
+deleting the cluster deletes the data. [k8s/README.md](k8s/README.md) explains each step, how to
+check it's working, troubleshooting, and clean-up.
 
 ### Demo users
 
@@ -142,4 +172,4 @@ More detail is in [docs/design-notes.md](docs/design-notes.md).
 - No market holiday calendar (weekends are skipped, holidays aren't).
 - No login rate limiting, user management or screen for editing entitlements; users and
   entitlements come from migrations.
-- Not deployed anywhere.
+- Not deployed anywhere public. The Kubernetes manifests are for a local kind cluster only.

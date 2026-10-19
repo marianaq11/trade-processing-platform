@@ -1,0 +1,54 @@
+# The React build served by nginx, which also proxies /api/ to the backend Service. The browser
+# only talks to nginx, so session cookies and the CSRF token work as they do with Docker Compose.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: trade-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: frontend
+          image: trade-platform-frontend:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+# Not exposed outside the cluster. Open it with:
+#   kubectl -n trade-platform port-forward service/frontend 3001:80
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: trade-platform
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
