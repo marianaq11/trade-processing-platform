@@ -34,8 +34,9 @@ They're still recorded so the history shows which step a trade got to.
 
 ## Two kinds of "invalid"
 
-1. **Bad request**: missing fields, negative quantity, unknown account or symbol.
+1. **Bad request**: missing fields, negative quantity, unknown symbol.
    Returns 400 and nothing is stored. We can't attribute the trade to anything real.
+   (An unknown account gets a 403 instead; see [Account entitlements](#account-entitlements).)
 2. **Business rejection**: the request is well formed, but e.g. the account is suspended
    or a risk limit is breached. The trade is stored as REJECTED with a reason code and the
    API still returns 201, because the trade was recorded. Rejecting it is a normal outcome,
@@ -88,7 +89,9 @@ already rolled back, which is why `submit` uses `TransactionTemplate` instead of
 ## Settlement
 
 A scheduled job (weekdays, 6pm New York time) settles every ACCEPTED trade whose settlement
-date is today or earlier. Operations can also start the same job by hand.
+date is today or earlier. Operations can also start the same job by hand. Settling is simulated:
+it changes the trade's status to SETTLED and records the event, but no cash or securities move
+and nothing is sent to a clearing house.
 
 - "Today or earlier" means a missed run (server down over a weekend) catches up next time.
 - Each trade settles in its own transaction, so one failure doesn't undo the rest.
@@ -164,6 +167,9 @@ Found by poking at the API with curl:
 - Trade notionals are sent as strings too, always with 4 decimal places (`"99999989900000.0100"`).
   As a JSON number that one reads as ...900,000.02. The new trade form works out its notional
   preview from the typed quantity and price with `BigInt`, not by multiplying JS numbers.
+- Trade prices are sent as plain JSON numbers. They have at most 11 significant digits (see
+  "Input limits"), so turning the typed text into a JS number and back into JSON doesn't change
+  any digits, and the backend reads the value into `BigDecimal`.
 - The risk limit editor checks the backend's ranges before saving, comparing amounts as decimals:
   notional limits from 0.01 to 999,999,999,999,999.99, tolerance from 0.01 to 100%, and the
   per-trade limit no higher than the daily one. The backend still checks all of these.

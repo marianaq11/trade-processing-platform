@@ -1,4 +1,4 @@
-# Trade Processing & Risk Platform
+# Trade Processing & Risk Simulator
 
 A simplified version of what happens to a US equity trade after a trader books it. The trade is
 checked against the trader's account entitlements and the account's risk limits, then accepted
@@ -22,11 +22,11 @@ changed which limit.
 - **Risk controls**: per-account limits on price (vs. a reference price), notional per trade and
   notional per day. Risk managers can change them, with a required reason.
 - **Account entitlements**: traders can only book trades on the accounts they're assigned to.
-- **Duplicate protection**: resubmitting the same trade (after a timeout, say) returns the original
+- **Idempotent submits**: resubmitting the same trade (after a timeout, say) returns the original
   instead of booking it twice.
 - **Audit trail**: every risk limit change records the old value, the new value, who changed it and why.
-- **Settlement**: a scheduled job settles accepted trades on their settlement date. Operations can
-  also run it by hand.
+- **Simulated T+1 settlement**: a scheduled job marks accepted trades as settled on their settlement
+  date. Operations can also run it by hand.
 - **Role-based access**: traders, operations and risk managers each get their own pages and
   actions, enforced by the backend.
 
@@ -38,7 +38,7 @@ changed which limit.
 
 ## Tech stack
 
-- **Backend**: Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway
+- **Backend**: Java 21, Spring Boot 4 (Web MVC for the REST API, Data JPA, Security), PostgreSQL 17, Flyway
 - **Frontend**: React 19, TypeScript, Vite, served by nginx in the Docker image
 - **Tests**: JUnit 5 with Testcontainers, Vitest
 - **Running it**: Docker Compose, Kubernetes on a local kind cluster, GitHub Actions for CI
@@ -183,10 +183,13 @@ Sending the same one again returns the original trade. If two identical requests
 inside it, and `@Version` on the trade catches a cancel and a settle racing each other. A test
 runs three settlement jobs at the same time and checks every trade settled exactly once.
 
-**Money is never a floating-point number.** Prices, notionals and limits are `BigDecimal` in Java
-and `NUMERIC` in Postgres, and the API sends them as JSON strings, because the largest allowed
-limit has more digits than a JavaScript number holds exactly. The new trade form calculates its
-notional preview with `BigInt` instead of multiplying JS numbers.
+**Exact decimals for money.** Prices, notionals and limits are `BigDecimal` in Java and `NUMERIC`
+in Postgres. Notionals, limits and audit log values go over the API as JSON strings, because the
+largest allowed limit has more digits than a JavaScript number holds exactly, and the new trade
+form calculates its notional preview with `BigInt` instead of multiplying JS numbers. Trade prices
+are the exception: the form checks the typed text, then sends the price as a regular JS number.
+Prices are capped at 9,999,999.9999 with at most 4 decimal places, which is few enough digits
+that the backend receives exactly what was typed and reads it into a `BigDecimal`.
 
 **Entitlements are checked first.** This happens before the duplicate lookup, so resubmitting an
 existing trade can't get around it. An account code that doesn't exist gets the same 403 as one
@@ -203,4 +206,5 @@ More detail is in [docs/design-notes.md](docs/design-notes.md).
 - No market holiday calendar (weekends are skipped, holidays aren't).
 - No login rate limiting, user management or screen for editing entitlements; users and
   entitlements come from migrations.
-- Not deployed anywhere public. The Kubernetes manifests are for a local kind cluster only.
+- Not deployed anywhere public, and CI only builds and tests (there's no deploy step). The
+  Kubernetes manifests are for a local kind cluster only.
