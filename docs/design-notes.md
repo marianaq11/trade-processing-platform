@@ -58,8 +58,7 @@ closed seemed safer than letting unlimited trading through by accident.
 The daily limit has a race: two trades for the same account could both read the same
 running total and both pass. The risk check locks the account's `risk_limit` row
 (`SELECT ... FOR UPDATE`) so checks for the same account run one at a time.
-`RiskCheckIntegrationTest` fires 8 trades at once to check this. When I took the lock out,
-all 8 got accepted against a limit that only fits 4.
+`RiskCheckIntegrationTest` sends 8 trades concurrently and confirms that only 4 are accepted under the daily limit.
 
 ## Changing limits, and the audit trail
 
