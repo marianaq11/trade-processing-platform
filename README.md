@@ -1,11 +1,19 @@
-# Trade Processing & Risk Platform
+# Trade Processing & Risk Simulator
 
 A simplified version of what happens to a US equity trade after a trader books it. The trade is
 checked against the trader's account entitlements and the account's risk limits, then accepted
 or rejected with a reason, and settled one business day later (T+1). Every step is recorded, so
 you can always see what happened to a trade, who did it and why.
 
-![Trades page](docs/screenshots/trades.png)
+This is a student portfolio project that simulates post-trade processing. It isn't a trading app
+(there's no market data or order matching) and it isn't connected to a real clearing or settlement
+system: settling a trade here only updates its status in the database. What I wanted to model is
+the checks that happen between booking a trade and settling it. A trade on the wrong account, a
+mistyped price or an account going over its daily limit should be caught before it settles, and
+when something does go wrong, there should be a record of what happened to each trade and who
+changed which limit.
+
+![Trades page: accepted, settled, rejected and cancelled trades, with rejection reasons](docs/screenshots/trades.png)
 
 ## Features
 
@@ -14,23 +22,26 @@ you can always see what happened to a trade, who did it and why.
 - **Risk controls**: per-account limits on price (vs. a reference price), notional per trade and
   notional per day. Risk managers can change them, with a required reason.
 - **Account entitlements**: traders can only book trades on the accounts they're assigned to.
-- **Duplicate protection**: resubmitting the same trade (after a timeout, say) returns the original
+- **Idempotent submits**: resubmitting the same trade (after a timeout, say) returns the original
   instead of booking it twice.
 - **Audit trail**: every risk limit change records the old value, the new value, who changed it and why.
-- **Settlement**: a scheduled job settles accepted trades on their settlement date. Operations can
-  also run it by hand.
+- **Simulated T+1 settlement**: a scheduled job marks accepted trades as settled on their settlement
+  date. Operations can also run it by hand.
 - **Role-based access**: traders, operations and risk managers each get their own pages and
   actions, enforced by the backend.
 
-| Trade detail | New trade | Risk limits |
+| New trade (trader) | Accepted, waiting for T+1 | Rejected: over daily limit |
 |---|---|---|
-| ![Trade detail](docs/screenshots/trade-detail.png) | ![New trade](docs/screenshots/new-trade.png) | ![Risk limits](docs/screenshots/risk-limits.png) |
+| ![New trade form](docs/screenshots/new-trade.png) | ![Accepted trade and its lifecycle](docs/screenshots/trade-accepted.png) | ![Trade rejected for going over the daily limit](docs/screenshots/trade-detail.png) |
+| **Settlement (operations)** | **Risk limits (risk manager)** | **Audit log** |
+| ![Settlement page](docs/screenshots/settlement.png) | ![Risk limits page](docs/screenshots/risk-limits.png) | ![Audit log of risk limit changes](docs/screenshots/audit-log.png) |
 
 ## Tech stack
 
-Java 21, Spring Boot 4 (Web MVC, Data JPA, Security), PostgreSQL 17, Flyway, React 19 with
-TypeScript and Vite, JUnit 5 with Testcontainers, Vitest, Docker Compose, Kubernetes (kind),
-GitHub Actions.
+- **Backend**: Java 21, Spring Boot 4 (Web MVC for the REST API, Data JPA, Security), PostgreSQL 17, Flyway
+- **Frontend**: React 19, TypeScript, Vite, served by nginx in the Docker image
+- **Tests**: JUnit 5 with Testcontainers, Vitest
+- **Running it**: Docker Compose, Kubernetes on a local kind cluster, GitHub Actions for CI
 
 ## Running locally
 
@@ -143,15 +154,25 @@ npm.cmd run typecheck
 ```
 
 On macOS/Linux use `./mvnw test` and `npm test`. The backend tests start a real Postgres in Docker
-(Testcontainers), so Docker needs to be running. GitHub Actions runs both suites, the frontend
-lint/type-check/build, and the Docker image builds on every push.
+(Testcontainers), so Docker needs to be running.
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs on pushes to `main` and on pull
+requests, in three jobs:
+
+- **Backend**: compiles and runs all the tests with `./mvnw verify`.
+- **Frontend**: lint, type-check, tests and a production build.
+- **Docker Compose smoke test**: builds the images and starts the whole stack on a fresh database,
+  then checks that every Flyway migration ran, the backend reports healthy, nginx serves the app,
+  and a demo user can log in through the `/api` proxy.
 
 ## Implementation notes
 
+The parts that took the most thought. Several are about two requests or jobs hitting the same
+data at the same time.
+
 **Concurrent daily limit checks.** Two trades for the same account arriving together could both
 read the same "used today" total and both pass. The risk check locks the account's limit row
-(`SELECT ... FOR UPDATE`), so checks for one account run one at a time. A test fires 8 trades at
-once against a limit that only fits 4; without the lock, all 8 were accepted.
+(`SELECT ... FOR UPDATE`), so checks for one account run one at a time. A concurrency test submits 8 trades against a daily limit that only allows 4 and verifies that exactly 4 are accepted.
 
 **Duplicate requests.** The trade form generates a `clientTradeId` once per trade, not per click.
 Sending the same one again returns the original trade. If two identical requests race past the
@@ -160,6 +181,14 @@ Sending the same one again returns the original trade. If two identical requests
 **Settlement can run twice.** Each trade settles in its own transaction, its status is re-checked
 inside it, and `@Version` on the trade catches a cancel and a settle racing each other. A test
 runs three settlement jobs at the same time and checks every trade settled exactly once.
+
+**Exact decimals for money.** Prices, notionals and limits are `BigDecimal` in Java and `NUMERIC`
+in Postgres. Notionals, limits and audit log values go over the API as JSON strings, because the
+largest allowed limit has more digits than a JavaScript number holds exactly, and the new trade
+form calculates its notional preview with `BigInt` instead of multiplying JS numbers. Trade prices
+are the exception: the form checks the typed text, then sends the price as a regular JS number.
+Prices are capped at 9,999,999.9999 with at most 4 decimal places, which is few enough digits
+that the backend receives exactly what was typed and reads it into a `BigDecimal`.
 
 **Entitlements are checked first.** This happens before the duplicate lookup, so resubmitting an
 existing trade can't get around it. An account code that doesn't exist gets the same 403 as one
@@ -176,4 +205,5 @@ More detail is in [docs/design-notes.md](docs/design-notes.md).
 - No market holiday calendar (weekends are skipped, holidays aren't).
 - No login rate limiting, user management or screen for editing entitlements; users and
   entitlements come from migrations.
-- Not deployed anywhere public. The Kubernetes manifests are for a local kind cluster only.
+- Not deployed anywhere public, and CI only builds and tests (there's no deploy step). The
+  Kubernetes manifests are for a local kind cluster only.
