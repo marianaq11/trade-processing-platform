@@ -172,8 +172,7 @@ data at the same time.
 
 **Concurrent daily limit checks.** Two trades for the same account arriving together could both
 read the same "used today" total and both pass. The risk check locks the account's limit row
-(`SELECT ... FOR UPDATE`), so checks for one account run one at a time. A test fires 8 trades at
-once against a limit that only fits 4; without the lock, all 8 were accepted.
+(`SELECT ... FOR UPDATE`), so checks for one account run one at a time. A concurrency test submits 8 trades against a daily limit that only allows 4 and verifies that exactly 4 are accepted.
 
 **Duplicate requests.** The trade form generates a `clientTradeId` once per trade, not per click.
 Sending the same one again returns the original trade. If two identical requests race past the
